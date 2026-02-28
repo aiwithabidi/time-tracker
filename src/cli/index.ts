@@ -138,6 +138,68 @@ subCommands.set(
   })
 )
 
+subCommands.set(
+  'today',
+  lazy(() => import('./commands/today').then((m) => m.default), {
+    name: 'today',
+    description: "Show today's time by project",
+  })
+)
+
+subCommands.set(
+  'week',
+  lazy(() => import('./commands/week').then((m) => m.default), {
+    name: 'week',
+    description: "Show this week's time report",
+    args: {
+      project: {
+        type: 'string',
+        short: 'p',
+        description: 'Filter by project slug',
+      },
+    },
+  })
+)
+
+subCommands.set(
+  'log',
+  lazy(() => import('./commands/log').then((m) => m.default), {
+    name: 'log',
+    description: 'Show session history',
+    args: {
+      project: {
+        type: 'string',
+        short: 'p',
+        description: 'Filter by project slug',
+      },
+      from: {
+        type: 'string',
+        description: 'Start date (YYYY-MM-DD or shortcut)',
+      },
+      to: {
+        type: 'string',
+        description: 'End date (YYYY-MM-DD or shortcut)',
+      },
+    },
+  })
+)
+
+subCommands.set(
+  'last',
+  lazy(() => import('./commands/last').then((m) => m.default), {
+    name: 'last',
+    description: 'Show the last completed session',
+  })
+)
+
+subCommands.set(
+  'projects',
+  lazy(() => import('./commands/projects').then((m) => m.default), {
+    name: 'projects',
+    description: 'List all projects with this-week totals',
+  })
+)
+
 await cli(process.argv.slice(2), mainCommand, {
   name: 'tt',
   description: 'Time tracking for developers',
