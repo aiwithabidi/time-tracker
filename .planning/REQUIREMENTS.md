@@ -71,8 +71,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **CORR-01**: User can edit a past session's start/end time, note, project, or tags with `tt edit <id>`
 - [x] **CORR-02**: User can undo the last state-changing operation with `tt undo`
-- [ ] **CORR-03**: User can split a session at a specific time with `tt split <id> <time>`
-- [ ] **CORR-04**: User can merge two adjacent sessions with `tt merge <id1> <id2>`
+- [x] **CORR-03**: User can split a session at a specific time with `tt split <id> <time>`
+- [x] **CORR-04**: User can merge two adjacent sessions with `tt merge <id1> <id2>`
 
 ### Claude Code Integration
 
@@ -172,8 +172,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXPT-03 | Phase 3 | Complete |
 | CORR-01 | Phase 4 | Complete |
 | CORR-02 | Phase 4 | Complete |
-| CORR-03 | Phase 4 | Pending |
-| CORR-04 | Phase 4 | Pending |
+| CORR-03 | Phase 4 | Complete |
+| CORR-04 | Phase 4 | Complete |
 | CLCD-01 | Phase 5 | Pending |
 | CLCD-02 | Phase 5 | Pending |
 | CLCD-03 | Phase 5 | Pending |
