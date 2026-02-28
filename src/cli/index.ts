@@ -312,6 +312,66 @@ subCommands.set(
   })
 )
 
+subCommands.set(
+  'review',
+  lazy(() => import('./commands/review').then((m) => m.default), {
+    name: 'review',
+    description: 'Manage work reviews (usage: tt review gather|list|show|save|delete)',
+    args: {
+      project: {
+        type: 'string',
+        short: 'p',
+        description: 'Filter by project slug',
+      },
+      from: {
+        type: 'string',
+        description: 'Start date (YYYY-MM-DD or keyword)',
+      },
+      to: {
+        type: 'string',
+        description: 'End date (YYYY-MM-DD or keyword)',
+      },
+      spread: {
+        type: 'string',
+        description: 'Spread work across N weekdays',
+      },
+      limit: {
+        type: 'string',
+        short: 'l',
+        description: 'Limit number of results',
+      },
+      title: {
+        type: 'string',
+        description: 'Review title (for save)',
+      },
+      audience: {
+        type: 'string',
+        description: 'Review audience: client|developer|email|custom',
+      },
+      content: {
+        type: 'string',
+        description: 'Review content (for save)',
+      },
+      'period-start': {
+        type: 'string',
+        description: 'Period start epoch ms (for save)',
+      },
+      'period-end': {
+        type: 'string',
+        description: 'Period end epoch ms (for save)',
+      },
+      'total-ms': {
+        type: 'string',
+        description: 'Total duration in ms (for save)',
+      },
+      'raw-data': {
+        type: 'string',
+        description: 'Raw gathered data JSON (for save)',
+      },
+    },
+  })
+)
+
 await cli(process.argv.slice(2), mainCommand, {
   name: 'tt',
   description: 'Time tracking for developers',

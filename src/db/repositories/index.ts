@@ -6,6 +6,7 @@ import { createPulseRepository } from './pulse-repository'
 import { createNoteRepository } from './note-repository'
 import { createTagRepository } from './tag-repository'
 import { createUndoRepository } from './undo-repository'
+import { createReviewRepository } from './review-repository'
 
 type Db = BunSQLiteDatabase<typeof schema>
 
@@ -17,6 +18,7 @@ export function createRepositories(db: Db) {
     notes: createNoteRepository(db),
     tags: createTagRepository(db),
     undo: createUndoRepository(db),
+    reviews: createReviewRepository(db),
   }
 }
 

@@ -77,6 +77,42 @@ const MIGRATIONS_SQL = [
   snapshot TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );`,
+  `CREATE TABLE IF NOT EXISTS reviews (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  audience TEXT NOT NULL,
+  content TEXT NOT NULL,
+  raw_data_json TEXT NOT NULL,
+  period_start INTEGER NOT NULL,
+  period_end INTEGER NOT NULL,
+  total_ms INTEGER NOT NULL,
+  spread_days INTEGER,
+  project_id TEXT REFERENCES projects(id),
+  is_deleted INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);`,
+  `CREATE INDEX IF NOT EXISTS idx_reviews_period ON reviews(period_start, period_end);`,
+  `CREATE TABLE IF NOT EXISTS review_sessions (
+  id TEXT PRIMARY KEY,
+  review_id TEXT NOT NULL REFERENCES reviews(id),
+  session_id TEXT NOT NULL REFERENCES sessions(id)
+);`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_review_sessions_review_session ON review_sessions(review_id, session_id);`,
+  `CREATE TABLE IF NOT EXISTS review_git_commits (
+  id TEXT PRIMARY KEY,
+  review_id TEXT NOT NULL REFERENCES reviews(id),
+  hash TEXT NOT NULL,
+  short_hash TEXT NOT NULL,
+  author TEXT NOT NULL,
+  date INTEGER NOT NULL,
+  message TEXT NOT NULL,
+  repository_path TEXT NOT NULL,
+  files_changed INTEGER,
+  insertions INTEGER,
+  deletions INTEGER
+);`,
+  `CREATE INDEX IF NOT EXISTS idx_review_git_commits_review ON review_git_commits(review_id);`,
 ]
 
 export function ensureSchema(sqlite: Database): void {

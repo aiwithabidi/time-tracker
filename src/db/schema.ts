@@ -74,3 +74,45 @@ export const undoLog = sqliteTable('undo_log', {
   snapshot: text('snapshot').notNull(),
   createdAt: integer('created_at', { mode: 'number' }).notNull(),
 })
+
+export const reviews = sqliteTable('reviews', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  audience: text('audience').notNull(),
+  content: text('content').notNull(),
+  rawDataJson: text('raw_data_json').notNull(),
+  periodStart: integer('period_start', { mode: 'number' }).notNull(),
+  periodEnd: integer('period_end', { mode: 'number' }).notNull(),
+  totalMs: integer('total_ms', { mode: 'number' }).notNull(),
+  spreadDays: integer('spread_days', { mode: 'number' }),
+  projectId: text('project_id').references(() => projects.id),
+  isDeleted: integer('is_deleted', { mode: 'boolean' }).default(false).notNull(),
+  createdAt: integer('created_at', { mode: 'number' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'number' }).notNull(),
+}, (table) => [
+  index('idx_reviews_period').on(table.periodStart, table.periodEnd),
+])
+
+export const reviewSessions = sqliteTable('review_sessions', {
+  id: text('id').primaryKey(),
+  reviewId: text('review_id').notNull().references(() => reviews.id),
+  sessionId: text('session_id').notNull().references(() => sessions.id),
+}, (table) => [
+  uniqueIndex('idx_review_sessions_review_session').on(table.reviewId, table.sessionId),
+])
+
+export const reviewGitCommits = sqliteTable('review_git_commits', {
+  id: text('id').primaryKey(),
+  reviewId: text('review_id').notNull().references(() => reviews.id),
+  hash: text('hash').notNull(),
+  shortHash: text('short_hash').notNull(),
+  author: text('author').notNull(),
+  date: integer('date', { mode: 'number' }).notNull(),
+  message: text('message').notNull(),
+  repositoryPath: text('repository_path').notNull(),
+  filesChanged: integer('files_changed', { mode: 'number' }),
+  insertions: integer('insertions', { mode: 'number' }),
+  deletions: integer('deletions', { mode: 'number' }),
+}, (table) => [
+  index('idx_review_git_commits_review').on(table.reviewId),
+])

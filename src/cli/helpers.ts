@@ -13,6 +13,7 @@ import {
   MergeValidationError,
 } from '../core/session/index'
 import { createReportService as createReport, type ReportService } from '../core/reports/index'
+import { createReviewService as createReview, type ReviewService } from '../core/review/index'
 import { errorOutput } from './format'
 
 export function getTerminalId(): string {
@@ -30,6 +31,12 @@ export function createReportService(): ReportService {
   const db = getDb()
   const repos = createRepositories(db)
   return createReport({ repos })
+}
+
+export function createReviewService(): ReviewService {
+  const db = getDb()
+  const repos = createRepositories(db)
+  return createReview({ repos })
 }
 
 export function handleCommandError(err: unknown): void {

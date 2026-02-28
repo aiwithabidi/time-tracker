@@ -7,6 +7,9 @@ import type {
   sessionTags,
   activityPulses,
   undoLog,
+  reviews,
+  reviewSessions,
+  reviewGitCommits,
 } from './schema'
 
 export type Project = InferSelectModel<typeof projects>
@@ -29,3 +32,12 @@ export type NewActivityPulse = InferInsertModel<typeof activityPulses>
 
 export type UndoLogEntry = InferSelectModel<typeof undoLog>
 export type NewUndoLogEntry = InferInsertModel<typeof undoLog>
+
+export type Review = InferSelectModel<typeof reviews>
+export type NewReview = InferInsertModel<typeof reviews>
+
+export type ReviewSession = InferSelectModel<typeof reviewSessions>
+export type NewReviewSession = InferInsertModel<typeof reviewSessions>
+
+export type ReviewGitCommit = InferSelectModel<typeof reviewGitCommits>
+export type NewReviewGitCommit = InferInsertModel<typeof reviewGitCommits>
