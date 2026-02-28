@@ -158,6 +158,21 @@ export function createSessionRepository(db: Db) {
       return result
     },
 
+    findLastCompleted(): Session | undefined {
+      return db
+        .select()
+        .from(sessions)
+        .where(
+          and(
+            sql`${sessions.endTime} IS NOT NULL`,
+            eq(sessions.isDeleted, false),
+          ),
+        )
+        .orderBy(sql`${sessions.endTime} DESC`)
+        .limit(1)
+        .get()
+    },
+
     setPausedAt(id: string, pausedAt: number | null): Session {
       db.update(sessions)
         .set({ pausedAt, updatedAt: Date.now() })

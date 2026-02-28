@@ -2,6 +2,7 @@ import { getDb } from '../db/client'
 import { createRepositories } from '../db/repositories/index'
 import { createSessionService as createService, type SessionService } from '../core/session/index'
 import { NoActiveSessionError, NoProjectFoundError, InvalidTagError } from '../core/session/index'
+import { createReportService as createReport, type ReportService } from '../core/reports/index'
 import { errorOutput } from './format'
 
 export function getTerminalId(): string {
@@ -13,6 +14,12 @@ export function createSessionService(): SessionService {
   const repos = createRepositories(db)
 
   return createService({ repos })
+}
+
+export function createReportService(): ReportService {
+  const db = getDb()
+  const repos = createRepositories(db)
+  return createReport({ repos })
 }
 
 export function handleCommandError(err: unknown): void {
