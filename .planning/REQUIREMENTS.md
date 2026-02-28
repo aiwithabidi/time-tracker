@@ -49,16 +49,16 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **PROJ-01**: Project is auto-inferred from working directory (git root detection)
 - [ ] **PROJ-02**: User can override project mapping via config file or `tt alias add <dir> <slug>`
 - [ ] **PROJ-03**: User can set hourly rate per project
-- [ ] **PROJ-04**: User can list all known projects with `tt projects` (showing this-week totals)
+- [x] **PROJ-04**: User can list all known projects with `tt projects` (showing this-week totals)
 - [ ] **PROJ-05**: Project config supports client name, display name, slug, rate, and currency
 
 ### Reporting
 
-- [ ] **REPT-01**: User can see today's time breakdown by project with `tt today`
-- [ ] **REPT-02**: User can see weekly time report with `tt week` (optionally filtered by project)
-- [ ] **REPT-03**: User can browse session history with `tt log` (filterable by project, date range)
-- [ ] **REPT-04**: User can see the last completed session with `tt last`
-- [ ] **REPT-05**: All time displays use human-readable format (Xh Ym), never raw seconds
+- [x] **REPT-01**: User can see today's time breakdown by project with `tt today`
+- [x] **REPT-02**: User can see weekly time report with `tt week` (optionally filtered by project)
+- [x] **REPT-03**: User can browse session history with `tt log` (filterable by project, date range)
+- [x] **REPT-04**: User can see the last completed session with `tt last`
+- [x] **REPT-05**: All time displays use human-readable format (Xh Ym), never raw seconds
 - [ ] **REPT-06**: User can see billable totals per project (hours x rate = dollar amount) with `tt week --billable`
 
 ### Export
@@ -159,13 +159,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROJ-01 | Phase 1 | Pending |
 | PROJ-02 | Phase 1 | Pending |
 | PROJ-03 | Phase 1 | Pending |
-| PROJ-04 | Phase 3 | Pending |
+| PROJ-04 | Phase 3 | Complete |
 | PROJ-05 | Phase 1 | Pending |
-| REPT-01 | Phase 3 | Pending |
-| REPT-02 | Phase 3 | Pending |
-| REPT-03 | Phase 3 | Pending |
-| REPT-04 | Phase 3 | Pending |
-| REPT-05 | Phase 3 | Pending |
+| REPT-01 | Phase 3 | Complete |
+| REPT-02 | Phase 3 | Complete |
+| REPT-03 | Phase 3 | Complete |
+| REPT-04 | Phase 3 | Complete |
+| REPT-05 | Phase 3 | Complete |
 | REPT-06 | Phase 3 | Pending |
 | EXPT-01 | Phase 3 | Pending |
 | EXPT-02 | Phase 3 | Pending |

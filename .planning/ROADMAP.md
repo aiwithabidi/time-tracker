@@ -13,7 +13,7 @@ Five phases take TimeTracker from zero to a fully integrated CLI time tracker. P
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - SQLite schema, repository layer, project inference, and manual start/stop/status commands
-- [ ] **Phase 2: Hook Integration** - Claude Code lifecycle hooks, activity pulses, idle detection, and startup reconciliation
+- [x] **Phase 2: Hook Integration** - Claude Code lifecycle hooks, activity pulses, idle detection, and startup reconciliation
 - [ ] **Phase 3: Reporting and Export** - Weekly and per-project reports, session history, billable totals, and CSV export
 - [ ] **Phase 4: Session Correction** - Edit, undo, split, and merge commands for billing-safe session correction
 - [ ] **Phase 5: Claude Code Slash Commands** - `/tt` slash commands that surface tracking status and control inside Claude Code
@@ -50,8 +50,8 @@ Plans:
 **Plans**: Ready
 
 Plans:
-- [ ] 02-01: Shell hook scripts (SessionStart, Stop, PostToolUse), `tt pulse` subcommand, `tt setup` installer
-- [ ] 02-02: IdleDetector with soft/hard thresholds, `tt away`/`tt back`, idle integration in pulse flow
+- [x] 02-01: Shell hook scripts (SessionStart, Stop, PostToolUse), `tt pulse` subcommand, `tt setup` installer
+- [x] 02-02: IdleDetector with soft/hard thresholds, `tt away`/`tt back`, idle integration in pulse flow
 
 ### Phase 3: Reporting and Export
 **Goal**: Users can see exactly where their billable hours went and export the data for client invoicing
@@ -63,7 +63,7 @@ Plans:
   3. Running `tt log` shows session history filterable by `--project` and `--from`/`--to` date flags
   4. Running `tt projects` shows all known projects with their this-week totals
   5. Running `tt export csv --project=x --from=DATE --to=DATE` produces a CSV file with project, date, start, end, duration, notes, and tags columns; `--dry-run` previews row count without writing
-**Plans**: TBD
+**Plans**: Ready
 
 Plans:
 - [ ] 03-01: ReportEngine with aggregation, `tt today`, `tt week`, `tt log`, `tt last`, `tt projects`
@@ -107,7 +107,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete | 2026-02-28 |
-| 2. Hook Integration | 0/2 | Not started | - |
+| 2. Hook Integration | 2/2 | Complete | 2026-02-28 |
 | 3. Reporting and Export | 0/2 | Not started | - |
 | 4. Session Correction | 0/2 | Not started | - |
 | 5. Claude Code Slash Commands | 0/1 | Not started | - |

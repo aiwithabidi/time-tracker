@@ -5,33 +5,34 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Effortless, accurate time tracking that works passively in the background
-**Current focus:** Phase 2 — Hook Integration (IN PROGRESS)
+**Current focus:** Phase 3 — Reporting and Export (in progress)
 
 ## Current Position
 
-Phase: 2 of 5 (Hook Integration) — IN PROGRESS
-Plan: 2 of 2 in current phase
-Status: Plan 02-02 complete — idle detection, away/back, enhanced now
-Last activity: 2026-02-28 — Plan 02-02 executed (5 tasks, 5 commits)
+Phase: 3 of 5 (Reporting and Export) — IN PROGRESS
+Plan: 1 of 2 in current phase (Plan 01 complete)
+Status: Plan 03-01 complete — reporting engine with 5 CLI commands
+Last activity: 2026-02-28 — Phase 3 Plan 01 executed (3 tasks, 3 commits)
 
-Progress: [████░░░░░░] 40%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
+- Total plans completed: 6
 - Average duration: ~5 min
-- Total execution time: ~0.32 hours
+- Total execution time: ~0.5 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 3/3 | ~15 min | ~5 min |
-| 02-hook-integration | 1/2 | ~4 min | ~4 min |
+| 02-hook-integration | 2/2 | ~7 min | ~3.5 min |
+| 03-reporting-export | 1/2 | ~7 min | ~7 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3 min), 01-02 (3.5 min), 01-03 (6 min), 02-02 (4 min)
+- Last 5 plans: 01-03 (6 min), 02-01 (3 min), 02-02 (4 min), 03-01 (7 min)
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -43,6 +44,8 @@ Progress: [████░░░░░░] 40%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Phase 3, Plan 01]: ReportService follows same factory pattern as SessionService (createReportService with repos dep injection)
+- [Phase 3, Plan 01]: cli-table3 ships bundled types, no separate @types package needed
 - [Phase 2, Plan 02]: Idle detection is pure stateless computation -- no timers, computed on-demand from pulse timestamps
 - [Phase 2, Plan 02]: resumeFromIdle uses atomic SQL increment to prevent race conditions
 - [Phase 2, Plan 02]: Paused symbol uses yellow color matching stopped symbol
@@ -71,5 +74,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Completed 02-02-PLAN.md
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None
