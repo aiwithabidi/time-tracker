@@ -172,7 +172,7 @@ Present this weekly summary to the user in a readable way. Highlight the total h
 - **Not using `disable-model-invocation: true` on side-effect skills:** Claude may auto-trigger `/tt:stop` when it thinks work is done. Always set this on start/stop/note/edit.
 - **Asking Claude to run `Bash` to get status:** This creates an extra tool-use turn visible in the UI, adds latency, and requires permission approval. Use `!`command`` injection instead.
 - **Using `context: fork`:** Forks run in isolated subagent context with no conversation history. Status commands don't benefit from isolation and it adds startup overhead.
-- **Hardcoding absolute paths:** Use `./dist/tt` (relative to project root) not `/Users/titan/.../dist/tt`. The skill runs from the project working directory.
+- **Hardcoding absolute paths:** Use `./dist/tt` (relative to project root) not `~/.../dist/tt`. The skill runs from the project working directory.
 
 ---
 
@@ -439,13 +439,13 @@ Migrate the $0 component from $1 to $2.
 ### Primary (HIGH confidence)
 - `https://code.claude.com/docs/en/slash-commands` — complete skills/slash commands documentation including frontmatter reference, `!`command`` injection, `$ARGUMENTS`, namespacing, invocation control
 - `https://code.claude.com/docs/en/sub-agents` — subagent documentation confirming `context: fork`, `agent:` field, built-in agent types
-- `/Users/titan/.claude/commands/gsd/research-phase.md` — confirmed colon namespace pattern in `name: gsd:research-phase` frontmatter
-- `/Users/titan/.claude/commands/gsd/execute-phase.md` — confirmed `name: gsd:execute-phase`, `argument-hint:`, `allowed-tools:` frontmatter fields in production use
+- `~/.claude/commands/gsd/research-phase.md` — confirmed colon namespace pattern in `name: gsd:research-phase` frontmatter
+- `~/.claude/commands/gsd/execute-phase.md` — confirmed `name: gsd:execute-phase`, `argument-hint:`, `allowed-tools:` frontmatter fields in production use
 
 ### Secondary (MEDIUM confidence)
 - Project `package.json` — confirmed binary is at `dist/tt` via `bun build --compile src/cli/index.ts --outfile dist/tt`
 - Project source `src/cli/commands/` — confirmed all required `tt` subcommands exist: `now`, `week`, `note`, `start`, `stop`, `projects`, `edit`
-- `/Users/titan/.claude/commands/tdd.md` — confirmed `description:` frontmatter is the standard first field in existing user commands
+- `~/.claude/commands/tdd.md` — confirmed `description:` frontmatter is the standard first field in existing user commands
 
 ### Tertiary (LOW confidence)
 - `NO_COLOR=1` behavior with chalk v5: Based on chalk documentation and Node.js conventions; should be verified by running the binary

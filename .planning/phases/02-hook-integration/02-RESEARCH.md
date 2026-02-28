@@ -127,7 +127,7 @@ All hooks receive this JSON on stdin:
 {
   "session_id": "abc123",
   "transcript_path": "/Users/.../.claude/projects/.../transcript.jsonl",
-  "cwd": "/Users/titan/my-project",
+  "cwd": "~/my-project",
   "permission_mode": "default",
   "hook_event_name": "PostToolUse"
 }
@@ -145,7 +145,7 @@ All hooks receive this JSON on stdin:
 ```json
 {
   "session_id": "abc123",
-  "cwd": "/Users/titan/my-project",
+  "cwd": "~/my-project",
   "hook_event_name": "SessionStart",
   "source": "startup",
   "model": "claude-sonnet-4-6"
