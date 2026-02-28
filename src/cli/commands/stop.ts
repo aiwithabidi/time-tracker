@@ -1,5 +1,6 @@
 import { define } from 'gunshi'
-import { output } from '../format'
+import { output, formatDuration } from '../format'
+import { createSessionService, handleCommandError, getTerminalId } from '../helpers'
 
 const stopCommand = define({
   name: 'stop',
@@ -12,7 +13,20 @@ const stopCommand = define({
     },
   },
   run: (ctx) => {
-    output('info', `stop command not yet implemented (project: ${ctx.values.project ?? 'auto-detect'})`)
+    try {
+      const service = createSessionService()
+      const terminalId = getTerminalId()
+      const cwd = process.cwd()
+
+      const result = service.stop(cwd, terminalId, {
+        projectOverride: ctx.values.project,
+      })
+
+      const duration = formatDuration(result.durationMs)
+      output('stopped', `Stopped ${result.project.displayName} \u2014 ${duration}`)
+    } catch (error) {
+      handleCommandError(error)
+    }
   },
 })
 

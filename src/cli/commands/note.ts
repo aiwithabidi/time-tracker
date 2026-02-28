@@ -1,5 +1,6 @@
 import { define } from 'gunshi'
-import { output } from '../format'
+import { output, errorOutput } from '../format'
+import { createSessionService, handleCommandError } from '../helpers'
 
 const noteCommand = define({
   name: 'note',
@@ -9,11 +10,27 @@ const noteCommand = define({
       type: 'string',
       short: 'm',
       description: 'Note content',
-      required: true,
     },
   },
   run: (ctx) => {
-    output('info', `note command not yet implemented (message: ${ctx.values.message})`)
+    try {
+      const service = createSessionService()
+      const cwd = process.cwd()
+
+      // Support both `tt note -m "text"` and `tt note "text"` (positional)
+      const text = ctx.values.message ?? ctx.positionals?.[0]
+
+      if (!text || text.trim().length === 0) {
+        errorOutput('No note text provided', 'Usage: tt note -m "your note" or tt note "your note"')
+        process.exitCode = 1
+        return
+      }
+
+      service.addNote(cwd, text.trim())
+      output('info', 'Note added')
+    } catch (error) {
+      handleCommandError(error)
+    }
   },
 })
 
