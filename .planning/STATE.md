@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 ## Current Position
 
 Phase: 1 of 5 (Foundation)
-Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-02-27 — Roadmap created
+Plan: 1 of 3 in current phase
+Status: Executing Phase 1 plans
+Last activity: 2026-02-28 — Plan 01-01 complete (database schema + repository layer)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 7%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+- Total plans completed: 1
+- Average duration: 3 min
+- Total execution time: 0.05 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01-foundation | 1/3 | 3 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: —
-- Trend: —
+- Last 5 plans: 01-01 (3 min)
+- Trend: Starting
 
 *Updated after each plan completion*
 
@@ -42,6 +42,9 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Phase 1, Plan 01]: Programmatic CREATE TABLE IF NOT EXISTS instead of drizzle-kit migrations for zero-friction first use
+- [Phase 1, Plan 01]: Repository factory functions (not classes) returning plain objects for immutability
+- [Phase 1, Plan 01]: crypto.randomUUID() for all entity IDs (zero deps, built into Bun)
 - [Pre-Phase 1]: Heartbeat-based session lifecycle — hooks are fire-and-forget hints; SQLite is source of truth
 - [Pre-Phase 1]: Stateless architecture (no daemon); idle detection computed on-demand, not by running timer
 - [Pre-Phase 1]: Bun + bun:sqlite + drizzle-orm + gunshi + luxon + vitest stack confirmed against current docs
@@ -60,6 +63,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-27
-Stopped at: Roadmap created, all files written
+Last session: 2026-02-28
+Stopped at: Completed 01-01-PLAN.md
 Resume file: None

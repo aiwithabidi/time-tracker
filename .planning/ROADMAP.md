@@ -30,10 +30,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Opening a second terminal in the same project directory and running `tt start` attaches to the existing session rather than creating a duplicate (TT_TERMINAL_ID deduplication)
   4. User can add a note and a tag to the current session; both persist across process restarts
   5. The compiled `tt` binary starts in under 100ms on a cold run
-**Plans**: TBD
+**Plans**: Ready
 
 Plans:
-- [ ] 01-01: Database schema, WAL mode, and Drizzle repository layer
+- [x] 01-01: Database schema, WAL mode, and Drizzle repository layer
 - [ ] 01-02: ProjectResolver, compiled binary, and CLI entry point (gunshi)
 - [ ] 01-03: Session commands — start, stop, now, note, tag with singleton enforcement
 
@@ -106,7 +106,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Not started | - |
+| 1. Foundation | 1/3 | In progress | - |
 | 2. Hook Integration | 0/2 | Not started | - |
 | 3. Reporting and Export | 0/2 | Not started | - |
 | 4. Session Correction | 0/2 | Not started | - |

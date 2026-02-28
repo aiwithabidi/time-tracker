@@ -9,12 +9,12 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Foundation
 
-- [ ] **FNDN-01**: Local SQLite database with WAL mode stores all session and pulse data
-- [ ] **FNDN-02**: Database schema includes UTC millisecond timestamps with IANA timezone column
-- [ ] **FNDN-03**: Database schema includes rate_at_time snapshot on each session
-- [ ] **FNDN-04**: Database schema includes terminal_id, source, idle_deducted_ms fields from day one
-- [ ] **FNDN-05**: All session deletes are soft-deletes (is_deleted flag) to support undo
-- [ ] **FNDN-06**: Activity pulses table stores heartbeats with timestamp and source type
+- [x] **FNDN-01**: Local SQLite database with WAL mode stores all session and pulse data
+- [x] **FNDN-02**: Database schema includes UTC millisecond timestamps with IANA timezone column
+- [x] **FNDN-03**: Database schema includes rate_at_time snapshot on each session
+- [x] **FNDN-04**: Database schema includes terminal_id, source, idle_deducted_ms fields from day one
+- [x] **FNDN-05**: All session deletes are soft-deletes (is_deleted flag) to support undo
+- [x] **FNDN-06**: Activity pulses table stores heartbeats with timestamp and source type
 - [ ] **FNDN-07**: Compiled Bun binary (`bun build --compile`) for fast CLI startup
 
 ### Session Management
@@ -131,12 +131,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FNDN-01 | Phase 1 | Pending |
-| FNDN-02 | Phase 1 | Pending |
-| FNDN-03 | Phase 1 | Pending |
-| FNDN-04 | Phase 1 | Pending |
-| FNDN-05 | Phase 1 | Pending |
-| FNDN-06 | Phase 1 | Pending |
+| FNDN-01 | Phase 1 | Complete |
+| FNDN-02 | Phase 1 | Complete |
+| FNDN-03 | Phase 1 | Complete |
+| FNDN-04 | Phase 1 | Complete |
+| FNDN-05 | Phase 1 | Complete |
+| FNDN-06 | Phase 1 | Complete |
 | FNDN-07 | Phase 1 | Pending |
 | SESS-01 | Phase 1 | Pending |
 | SESS-02 | Phase 1 | Pending |
