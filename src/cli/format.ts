@@ -57,6 +57,14 @@ export function output(symbol: keyof typeof symbols, message: string): void {
   }
 }
 
+export function formatCurrency(amount: number, currency: string): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+  }).format(amount)
+}
+
 export function errorOutput(message: string, suggestion?: string): void {
   if (isColorEnabled()) {
     process.stderr.write(`${chalk.red(symbols.error)} ${chalk.red(message)}\n`)
