@@ -14,9 +14,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - SQLite schema, repository layer, project inference, and manual start/stop/status commands
 - [x] **Phase 2: Hook Integration** - Claude Code lifecycle hooks, activity pulses, idle detection, and startup reconciliation
-- [ ] **Phase 3: Reporting and Export** - Weekly and per-project reports, session history, billable totals, and CSV export
-- [ ] **Phase 4: Session Correction** - Edit, undo, split, and merge commands for billing-safe session correction
-- [ ] **Phase 5: Claude Code Slash Commands** - `/tt` slash commands that surface tracking status and control inside Claude Code
+- [x] **Phase 3: Reporting and Export** - Weekly and per-project reports, session history, billable totals, and CSV export
+- [x] **Phase 4: Session Correction** - Edit, undo, split, and merge commands for billing-safe session correction
+- [x] **Phase 5: Claude Code Slash Commands** - `/tt` slash commands that surface tracking status and control inside Claude Code
 
 ## Phase Details
 
@@ -78,11 +78,11 @@ Plans:
   2. Running `tt undo` after any state-changing operation (start, stop, edit, split, merge) reverts the change; the previous state is fully restored
   3. User can run `tt split <id> <time>` to divide a session at a given time, producing two sessions whose combined duration equals the original
   4. User can run `tt merge <id1> <id2>` on two adjacent sessions to produce a single session spanning the same time range
-**Plans**: TBD
+**Plans**: Ready
 
 Plans:
-- [ ] 04-01: Edit and undo commands with soft-delete undo stack
-- [ ] 04-02: Split and merge commands with preview confirmation
+- [x] 04-01: Edit and undo commands with soft-delete undo stack
+- [x] 04-02: Split and merge commands with preview confirmation
 
 ### Phase 5: Claude Code Slash Commands
 **Goal**: Users can check tracking status and control sessions without leaving the Claude Code conversation
@@ -94,10 +94,10 @@ Plans:
   3. Typing `/tt:note "description"` adds a note to the current session; the note appears in subsequent `tt log` output
   4. Typing `/tt:start` or `/tt:stop` starts or stops tracking with confirmation output visible in the conversation
   5. All slash commands invoke the compiled `tt` binary and return results formatted for the Claude Code conversation context
-**Plans**: TBD
+**Plans**: Ready
 
 Plans:
-- [ ] 05-01: Slash command definitions for `/tt`, `/tt:week`, `/tt:note`, `/tt:start`, `/tt:stop`, `/tt:projects`, `/tt:edit`
+- [x] 05-01: Slash command skills for `/tt`, `/tt:week`, `/tt:note`, `/tt:start`, `/tt:stop`, `/tt:projects`, `/tt:edit`
 
 ## Progress
 
@@ -109,5 +109,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Foundation | 3/3 | Complete | 2026-02-28 |
 | 2. Hook Integration | 2/2 | Complete | 2026-02-28 |
 | 3. Reporting and Export | 2/2 | Complete | 2026-02-28 |
-| 4. Session Correction | 0/2 | Not started | - |
-| 5. Claude Code Slash Commands | 0/1 | Not started | - |
+| 4. Session Correction | 2/2 | Complete | 2026-02-28 |
+| 5. Claude Code Slash Commands | 1/1 | Complete | 2026-02-28 |
