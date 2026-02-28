@@ -1,7 +1,15 @@
 import type { Repositories } from '../../db/repositories/index'
 import type { Session, Project } from '../../db/types'
 import { resolveProject, ensureProjectInDb, type ResolvedProject } from '../../services/project-resolver'
-import { NoActiveSessionError, NoProjectFoundError, InvalidTagError } from './errors'
+import {
+  NoActiveSessionError,
+  NoProjectFoundError,
+  InvalidTagError,
+  SessionNotFoundError,
+  AmbiguousIdError,
+  NothingToUndoError,
+  InvalidTimeRangeError,
+} from './errors'
 import type {
   SessionStartResult,
   SessionStopResult,
@@ -12,7 +20,14 @@ import type {
   PulseResult,
   AwayResult,
   BackResult,
+  EditOptions,
+  EditResult,
+  UndoResult,
 } from './types'
+import type { SessionNote, SessionTag } from '../../db/types'
+import type { UndoSnapshot } from '../../db/repositories/undo-repository'
+import { parseEditTime } from '../../cli/time-parsing'
+import { withTransaction } from '../../db/client'
 import { computeIdleState, computeIdleDeduction, type IdleConfig } from './idle-detector'
 import { loadConfig } from '../../config/config-loader'
 
@@ -121,6 +136,39 @@ export function createSessionService(deps: SessionServiceDeps) {
     return { totalMs, sessionCount }
   }
 
+  function resolveSessionByPrefix(prefix: string): Session {
+    try {
+      return repos.sessions.findByPrefix(prefix)
+    } catch (err) {
+      if (err instanceof Error) {
+        if (err.message.startsWith('SESSION_NOT_FOUND:')) {
+          throw new SessionNotFoundError(prefix)
+        }
+        if (err.message.startsWith('AMBIGUOUS_ID:')) {
+          const parts = err.message.split(':')
+          const candidates = (parts[2] ?? '').split(', ')
+          throw new AmbiguousIdError(prefix, candidates)
+        }
+      }
+      throw err
+    }
+  }
+
+  function buildSnapshot(sessionIds: string[]): UndoSnapshot {
+    const snapshotSessions: Session[] = []
+    const snapshotNotes: SessionNote[] = []
+    const snapshotTags: SessionTag[] = []
+
+    for (const id of sessionIds) {
+      const session = repos.sessions.findById(id)
+      if (session) snapshotSessions.push(session)
+      snapshotNotes.push(...repos.notes.findBySessionId(id))
+      snapshotTags.push(...repos.tags.findBySessionId(id))
+    }
+
+    return { sessions: snapshotSessions, notes: snapshotNotes, tags: snapshotTags }
+  }
+
   return {
     start(cwd: string, terminalId: string, options?: SessionStartOptions): SessionStartResult {
       const { resolved, project } = resolveAndEnsureProject(cwd, options?.projectOverride)
@@ -181,6 +229,13 @@ export function createSessionService(deps: SessionServiceDeps) {
         isDeleted: false,
         createdAt: now,
         updatedAt: now,
+      })
+
+      repos.undo.push('start', {
+        sessions: [],
+        notes: [],
+        tags: [],
+        deletedSessionIds: [session.id],
       })
 
       repos.sessions.attachTerminal(session.id, terminalId)
@@ -249,6 +304,9 @@ export function createSessionService(deps: SessionServiceDeps) {
       if (!project) {
         throw new NoActiveSessionError("Try 'tt start' to begin tracking")
       }
+
+      const stopSnapshot = buildSnapshot([activeSession.id])
+      repos.undo.push('stop', stopSnapshot)
 
       const endTime = Date.now()
       const stoppedSession = repos.sessions.stop(activeSession.id, endTime)
@@ -526,6 +584,118 @@ export function createSessionService(deps: SessionServiceDeps) {
 
       const updatedSession = repos.sessions.setPausedAt(activeSession.id, now)
       return { action: 'paused', session: updatedSession, project }
+    },
+
+    edit(sessionPrefix: string, options: EditOptions): EditResult {
+      const session = resolveSessionByPrefix(sessionPrefix)
+      const changes: string[] = []
+
+      return withTransaction(() => {
+        // Snapshot before editing
+        const snapshot = buildSnapshot([session.id])
+        repos.undo.push('edit', snapshot)
+
+        let newStartTime = session.startTime
+        let newEndTime = session.endTime
+
+        // Parse --start
+        if (options.start) {
+          newStartTime = parseEditTime(options.start, session.startTime)
+          changes.push(`start: ${new Date(session.startTime).toISOString()} -> ${new Date(newStartTime).toISOString()}`)
+        }
+
+        // Parse --end
+        if (options.end) {
+          if (!session.endTime) {
+            throw new InvalidTimeRangeError('Cannot edit end time of an active session. Stop it first.')
+          }
+          newEndTime = parseEditTime(options.end, session.startTime)
+          changes.push(`end: ${new Date(session.endTime).toISOString()} -> ${new Date(newEndTime!).toISOString()}`)
+        }
+
+        // Validate time range
+        if (newEndTime !== null && newEndTime !== undefined && newStartTime >= newEndTime) {
+          throw new InvalidTimeRangeError(`start (${new Date(newStartTime).toISOString()}) must be before end (${new Date(newEndTime).toISOString()})`)
+        }
+
+        // Apply time changes
+        const timeChanges: Record<string, unknown> = {}
+        if (options.start) timeChanges['startTime'] = newStartTime
+        if (options.end) timeChanges['endTime'] = newEndTime
+
+        // Parse --project
+        if (options.project) {
+          const newProject = repos.projects.findBySlug(options.project)
+          if (!newProject) {
+            throw new Error(`Project "${options.project}" not found`)
+          }
+          timeChanges['projectId'] = newProject.id
+          changes.push(`project: -> ${options.project}`)
+        }
+
+        if (Object.keys(timeChanges).length > 0) {
+          repos.sessions.update(session.id, timeChanges as Partial<Pick<Session, 'startTime' | 'endTime' | 'projectId'>>)
+        }
+
+        // Add note
+        if (options.note) {
+          repos.notes.create(session.id, options.note)
+          changes.push(`note: added "${options.note}"`)
+        }
+
+        // Add tag
+        if (options.tag) {
+          repos.tags.addTag(session.id, options.tag)
+          changes.push(`tag: added "${options.tag}"`)
+        }
+
+        // Remove tag
+        if (options.untag) {
+          repos.tags.removeTag(session.id, options.untag)
+          changes.push(`tag: removed "${options.untag}"`)
+        }
+
+        const updated = repos.sessions.findById(session.id)!
+        return { session: updated, changes }
+      })
+    },
+
+    undo(): UndoResult {
+      return withTransaction(() => {
+        const entry = repos.undo.pop()
+        if (!entry) throw new NothingToUndoError()
+
+        const restoredSessionIds: string[] = []
+
+        // Restore sessions
+        for (const session of entry.snapshot.sessions) {
+          repos.sessions.restore(session)
+          restoredSessionIds.push(session.id)
+        }
+
+        // Restore notes: delete current notes for these sessions, re-insert snapshot
+        for (const session of entry.snapshot.sessions) {
+          repos.notes.deleteBySessionId(session.id)
+        }
+        for (const note of entry.snapshot.notes) {
+          repos.notes.restoreNote(note)
+        }
+
+        // Restore tags: delete current tags for these sessions, re-insert snapshot
+        for (const session of entry.snapshot.sessions) {
+          repos.tags.deleteBySessionId(session.id)
+        }
+        for (const tag of entry.snapshot.tags) {
+          repos.tags.restoreTag(tag)
+        }
+
+        // Hard-delete sessions created by the undone operation
+        for (const id of entry.snapshot.deletedSessionIds ?? []) {
+          repos.sessions.hardDelete(id)
+        }
+
+        return { operation: entry.operation, restoredSessionIds }
+      })
     },
 
     back(cwd: string, terminalId: string): BackResult {

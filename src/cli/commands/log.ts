@@ -43,12 +43,13 @@ const logCommand = define({
         process.stdout.write(chalk.bold(day.displayDate) + '  ' + chalk.dim(formatDuration(day.totalMs)) + '\n')
 
         const rows = day.sessions.map(s => [
+          chalk.dim(s.session.id.slice(0, 8)),
           formatTimeRange(s.session.startTime, s.session.endTime),
           s.project.displayName,
           formatDuration(s.durationMs),
         ])
 
-        const table = compactTable(['Time', 'Project', 'Duration'], rows)
+        const table = compactTable(['ID', 'Time', 'Project', 'Duration'], rows)
         process.stdout.write(table + '\n\n')
       }
     } catch (error) {
