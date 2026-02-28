@@ -157,6 +157,11 @@ subCommands.set(
         short: 'p',
         description: 'Filter by project slug',
       },
+      billable: {
+        type: 'boolean',
+        short: 'b',
+        description: 'Show billable amounts',
+      },
     },
   })
 )
@@ -197,6 +202,33 @@ subCommands.set(
   lazy(() => import('./commands/projects').then((m) => m.default), {
     name: 'projects',
     description: 'List all projects with this-week totals',
+  })
+)
+
+subCommands.set(
+  'export',
+  lazy(() => import('./commands/export').then((m) => m.default), {
+    name: 'export',
+    description: 'Export time data (usage: tt export csv [flags])',
+    args: {
+      project: {
+        type: 'string',
+        short: 'p',
+        description: 'Filter by project slug',
+      },
+      from: {
+        type: 'string',
+        description: 'Start date (YYYY-MM-DD or keyword)',
+      },
+      to: {
+        type: 'string',
+        description: 'End date (YYYY-MM-DD or keyword)',
+      },
+      'dry-run': {
+        type: 'boolean',
+        description: 'Preview without outputting CSV',
+      },
+    },
   })
 )
 

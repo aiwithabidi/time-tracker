@@ -1,5 +1,5 @@
 import { define } from 'gunshi'
-import { formatDuration, output } from '../format'
+import { formatDuration, output, formatCurrency } from '../format'
 import { createReportService, handleCommandError } from '../helpers'
 import { borderedTable } from '../table'
 
@@ -11,6 +11,11 @@ const weekCommand = define({
       type: 'string' as const,
       short: 'p',
       description: 'Filter by project slug',
+    },
+    billable: {
+      type: 'boolean' as const,
+      short: 'b',
+      description: 'Show billable amounts',
     },
   },
   run: (ctx) => {
@@ -25,17 +30,36 @@ const weekCommand = define({
 
       output('info', `Week: ${result.weekStart} to ${result.weekEnd}`)
 
-      const rows = result.projects.map(p => [
-        p.project.displayName,
-        formatDuration(p.totalMs),
-        `${p.sessionCount}`,
-      ])
+      const showBillable = ctx.values.billable === true
+      const headers = showBillable
+        ? ['Project', 'Time', 'Sessions', 'Amount']
+        : ['Project', 'Time', 'Sessions']
 
-      const table = borderedTable(
-        ['Project', 'Time', 'Sessions'],
-        rows,
-        ['Total', formatDuration(result.grandTotalMs), ''],
-      )
+      let billableTotal = 0
+      const rows = result.projects.map(p => {
+        const baseRow = [
+          p.project.displayName,
+          formatDuration(p.totalMs),
+          `${p.sessionCount}`,
+        ]
+        if (showBillable) {
+          const hours = p.totalMs / 3_600_000
+          if (p.project.hourlyRate) {
+            const amount = hours * p.project.hourlyRate
+            billableTotal += amount
+            baseRow.push(formatCurrency(amount, p.project.currency ?? 'USD'))
+          } else {
+            baseRow.push('--')
+          }
+        }
+        return baseRow
+      })
+
+      const footerRow = showBillable
+        ? ['Total', formatDuration(result.grandTotalMs), '', billableTotal > 0 ? formatCurrency(billableTotal, 'USD') : '']
+        : ['Total', formatDuration(result.grandTotalMs), '']
+
+      const table = borderedTable(headers, rows, footerRow)
       process.stdout.write(table + '\n')
     } catch (error) {
       handleCommandError(error)
