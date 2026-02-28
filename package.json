@@ -1,0 +1,26 @@
+{
+  "name": "time-tracker",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "db:push": "bunx drizzle-kit push",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/luxon": "^3.7.1",
+    "drizzle-kit": "^0.31.9",
+    "vitest": "^4.0.18"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "drizzle-orm": "^0.45.1",
+    "gunshi": "^0.29.2",
+    "luxon": "^3.7.2",
+    "zod": "^4.3.6"
+  }
+}
