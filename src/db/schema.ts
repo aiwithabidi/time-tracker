@@ -22,6 +22,7 @@ export const sessions = sqliteTable('sessions', {
   timezone: text('timezone').notNull(),
   source: text('source').notNull(),
   rateAtTime: real('rate_at_time'),
+  pausedAt: integer('paused_at', { mode: 'number' }),
   idleDeductedMs: integer('idle_deducted_ms').default(0).notNull(),
   isDeleted: integer('is_deleted', { mode: 'boolean' }).default(false).notNull(),
   createdAt: integer('created_at', { mode: 'number' }).notNull(),

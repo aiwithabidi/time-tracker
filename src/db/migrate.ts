@@ -69,6 +69,18 @@ CREATE TABLE IF NOT EXISTS activity_pulses (
 CREATE INDEX IF NOT EXISTS idx_activity_pulses_session_timestamp ON activity_pulses(session_id, timestamp);
 `
 
+const MIGRATIONS_SQL = [
+  `ALTER TABLE sessions ADD COLUMN paused_at INTEGER;`,
+]
+
 export function ensureSchema(sqlite: Database): void {
   sqlite.exec(CREATE_TABLES_SQL)
+
+  for (const migration of MIGRATIONS_SQL) {
+    try {
+      sqlite.exec(migration)
+    } catch {
+      // Column may already exist on re-run — safe to ignore
+    }
+  }
 }
