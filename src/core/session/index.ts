@@ -8,4 +8,8 @@ export type {
   SessionStopOptions,
   PulseOptions,
   PulseResult,
+  AwayResult,
+  BackResult,
 } from './types'
+export { computeIdleState, computeIdleDeduction, DEFAULT_IDLE_CONFIG } from './idle-detector'
+export type { IdleState, IdleConfig } from './idle-detector'

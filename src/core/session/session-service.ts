@@ -10,6 +10,8 @@ import type {
   SessionStopOptions,
   PulseOptions,
   PulseResult,
+  AwayResult,
+  BackResult,
 } from './types'
 import { computeIdleState, computeIdleDeduction, type IdleConfig } from './idle-detector'
 import { loadConfig } from '../../config/config-loader'
@@ -468,6 +470,80 @@ export function createSessionService(deps: SessionServiceDeps) {
       })
 
       return { action: 'pulsed', session: reconciledSession, project }
+    },
+
+    away(cwd: string): AwayResult {
+      let project: Project | undefined
+      let activeSession: Session | undefined
+
+      try {
+        const resolved = resolveProject(cwd)
+        const dbProject = ensureProjectInDb(resolved, repos.projects)
+        project = dbProject
+        activeSession = repos.sessions.findActiveByProject(dbProject.id)
+      } catch {
+        const allActive = repos.sessions.findActiveAll()
+        if (allActive.length > 0) {
+          activeSession = allActive[0]!
+          project = repos.projects.findAll().find(p => p.id === activeSession!.projectId)
+        }
+      }
+
+      if (!activeSession || !project) {
+        throw new NoActiveSessionError("No active session to pause")
+      }
+
+      const now = Date.now()
+
+      if (activeSession.pausedAt !== null) {
+        return {
+          action: 'already_paused',
+          session: activeSession,
+          project,
+          pauseDurationMs: now - activeSession.pausedAt,
+        }
+      }
+
+      const updatedSession = repos.sessions.setPausedAt(activeSession.id, now)
+      return { action: 'paused', session: updatedSession, project }
+    },
+
+    back(cwd: string, terminalId: string): BackResult {
+      let project: Project | undefined
+      let activeSession: Session | undefined
+
+      try {
+        const resolved = resolveProject(cwd)
+        const dbProject = ensureProjectInDb(resolved, repos.projects)
+        project = dbProject
+        activeSession = repos.sessions.findActiveByProject(dbProject.id)
+      } catch {
+        const allActive = repos.sessions.findActiveAll()
+        if (allActive.length > 0) {
+          activeSession = allActive[0]!
+          project = repos.projects.findAll().find(p => p.id === activeSession!.projectId)
+        }
+      }
+
+      if (!activeSession || !project || activeSession.pausedAt === null) {
+        throw new NoActiveSessionError("Not on a break. Try 'tt away' first")
+      }
+
+      const now = Date.now()
+      const breakDurationMs = Math.max(0, now - activeSession.pausedAt)
+
+      const updatedSession = repos.sessions.resumeFromIdle(activeSession.id, breakDurationMs)
+
+      // Write a resume pulse
+      repos.pulses.create({
+        id: crypto.randomUUID(),
+        sessionId: updatedSession.id,
+        terminalId,
+        sourceType: 'manual',
+        timestamp: now,
+      })
+
+      return { session: updatedSession, project, breakDurationMs }
     },
   }
 }

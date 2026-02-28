@@ -4,6 +4,7 @@ export const symbols = {
   started: '\u25B6',
   stopped: '\u25A0',
   idle: '\u25CB',
+  paused: '\u25CE',
   error: '\u2717',
   info: '\u25CF',
 } as const
@@ -47,7 +48,9 @@ export function output(symbol: keyof typeof symbols, message: string): void {
           ? chalk.green(icon)
           : symbol === 'stopped'
             ? chalk.yellow(icon)
-            : chalk.blue(icon)
+            : symbol === 'paused'
+              ? chalk.yellow(icon)
+              : chalk.blue(icon)
     process.stdout.write(`${coloredIcon} ${message}\n`)
   } else {
     process.stdout.write(`${icon} ${message}\n`)

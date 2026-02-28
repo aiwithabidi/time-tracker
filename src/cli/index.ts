@@ -84,6 +84,22 @@ subCommands.set(
 )
 
 subCommands.set(
+  'away',
+  lazy(() => import('./commands/away').then((m) => m.default), {
+    name: 'away',
+    description: 'Take a break from the current session',
+  })
+)
+
+subCommands.set(
+  'back',
+  lazy(() => import('./commands/back').then((m) => m.default), {
+    name: 'back',
+    description: 'Resume tracking after a break',
+  })
+)
+
+subCommands.set(
   'setup',
   lazy(() => import('./commands/setup').then((m) => m.default), {
     name: 'setup',

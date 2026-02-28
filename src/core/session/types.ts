@@ -42,3 +42,16 @@ export interface PulseResult {
   readonly session?: Session
   readonly project?: Project
 }
+
+export interface AwayResult {
+  readonly action: 'paused' | 'already_paused'
+  readonly session: Session
+  readonly project: Project
+  readonly pauseDurationMs?: number
+}
+
+export interface BackResult {
+  readonly session: Session
+  readonly project: Project
+  readonly breakDurationMs: number
+}
