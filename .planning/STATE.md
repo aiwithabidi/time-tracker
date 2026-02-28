@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Effortless, accurate time tracking that works passively in the background
-**Current focus:** Phase 3 — Reporting and Export (COMPLETE)
+**Current focus:** Phase 4 — Session Correction
 
 ## Current Position
 
-Phase: 3 of 5 (Reporting and Export) — COMPLETE
-Plan: 2 of 2 in current phase (all plans complete)
-Status: Phase 3 complete — CSV export, billable reports, reporting engine with 7 CLI commands
-Last activity: 2026-02-28 — Phase 3 Plan 02 executed (2 tasks, 2 commits)
+Phase: 4 of 5 (Session Correction)
+Plan: 1 of 2 in current phase
+Status: Plan 04-01 complete — edit/undo commands with short session IDs
+Last activity: 2026-02-28 — Phase 4 Plan 01 executed (3 tasks, 3 commits)
 
-Progress: [████████░░] 70%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: ~4 min
-- Total execution time: ~0.5 hours
+- Total plans completed: 8
+- Average duration: ~5 min
+- Total execution time: ~0.7 hours
 
 **By Phase:**
 
@@ -30,9 +30,10 @@ Progress: [████████░░] 70%
 | 01-foundation | 3/3 | ~15 min | ~5 min |
 | 02-hook-integration | 2/2 | ~7 min | ~3.5 min |
 | 03-reporting-export | 2/2 | ~9 min | ~4.5 min |
+| 04-session-correction | 1/2 | ~17 min | ~17 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (3 min), 02-02 (4 min), 03-01 (7 min), 03-02 (2 min)
+- Last 5 plans: 02-02 (4 min), 03-01 (7 min), 03-02 (2 min), 04-01 (17 min)
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -44,6 +45,9 @@ Progress: [████████░░] 70%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Phase 4, Plan 01]: Sentinel error strings in repo layer (SESSION_NOT_FOUND:/AMBIGUOUS_ID:) parsed into typed errors in service layer to avoid circular imports
+- [Phase 4, Plan 01]: findBySessionId added alongside existing findBySession for undo snapshot building
+- [Phase 4, Plan 01]: withTransaction wraps edit and undo for atomicity; start/stop undo pushes outside transactions
 - [Phase 3, Plan 02]: CSV to stdout and dry-run to stderr for clean shell piping
 - [Phase 3, Plan 02]: ExportService follows same factory pattern as ReportService and SessionService
 - [Phase 3, Plan 01]: ReportService follows same factory pattern as SessionService (createReportService with repos dep injection)
@@ -76,5 +80,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Completed 03-02-PLAN.md (Phase 3 complete)
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None

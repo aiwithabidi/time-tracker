@@ -66,8 +66,8 @@ Plans:
 **Plans**: Ready
 
 Plans:
-- [ ] 03-01: ReportEngine with aggregation, `tt today`, `tt week`, `tt log`, `tt last`, `tt projects`
-- [ ] 03-02: ExportService, `tt export csv` with dry-run, billable totals with `--billable` flag
+- [x] 03-01: ReportEngine with aggregation, `tt today`, `tt week`, `tt log`, `tt last`, `tt projects`
+- [x] 03-02: ExportService, `tt export csv` with dry-run, billable totals with `--billable` flag
 
 ### Phase 4: Session Correction
 **Goal**: Users can fix any tracking error without fear of permanent data loss, making the data trustworthy for billing
@@ -108,6 +108,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete | 2026-02-28 |
 | 2. Hook Integration | 2/2 | Complete | 2026-02-28 |
-| 3. Reporting and Export | 0/2 | Not started | - |
+| 3. Reporting and Export | 2/2 | Complete | 2026-02-28 |
 | 4. Session Correction | 0/2 | Not started | - |
 | 5. Claude Code Slash Commands | 0/1 | Not started | - |
