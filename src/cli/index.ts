@@ -84,6 +84,14 @@ subCommands.set(
 )
 
 subCommands.set(
+  'setup',
+  lazy(() => import('./commands/setup').then((m) => m.default), {
+    name: 'setup',
+    description: 'Install hook scripts and print configuration for Claude Code',
+  })
+)
+
+subCommands.set(
   'pulse',
   lazy(() => import('./commands/pulse').then((m) => m.default), {
     name: 'pulse',
