@@ -18,7 +18,8 @@ const noteCommand = define({
       const cwd = process.cwd()
 
       // Support both `tt note -m "text"` and `tt note "text"` (positional)
-      const text = ctx.values.message ?? ctx.positionals?.[0]
+      // positionals[0] is the command name ("note"), positionals[1] is the actual argument
+      const text = ctx.values.message ?? ctx.positionals?.[1]
 
       if (!text || text.trim().length === 0) {
         errorOutput('No note text provided', 'Usage: tt note -m "your note" or tt note "your note"')

@@ -15,6 +15,13 @@ subCommands.set(
   lazy(() => import('./commands/start').then((m) => m.default), {
     name: 'start',
     description: 'Start tracking time on a project',
+    args: {
+      project: {
+        type: 'string',
+        short: 'p',
+        description: 'Project slug or name',
+      },
+    },
   })
 )
 
@@ -23,6 +30,13 @@ subCommands.set(
   lazy(() => import('./commands/stop').then((m) => m.default), {
     name: 'stop',
     description: 'Stop the current time tracking session',
+    args: {
+      project: {
+        type: 'string',
+        short: 'p',
+        description: 'Project slug or name',
+      },
+    },
   })
 )
 
@@ -39,6 +53,13 @@ subCommands.set(
   lazy(() => import('./commands/note').then((m) => m.default), {
     name: 'note',
     description: 'Add a note to the current session',
+    args: {
+      message: {
+        type: 'string',
+        short: 'm',
+        description: 'Note content',
+      },
+    },
   })
 )
 
@@ -47,6 +68,18 @@ subCommands.set(
   lazy(() => import('./commands/tag').then((m) => m.default), {
     name: 'tag',
     description: 'Manage tags on the current session',
+    args: {
+      add: {
+        type: 'string',
+        short: 'a',
+        description: 'Tag to add',
+      },
+      remove: {
+        type: 'string',
+        short: 'r',
+        description: 'Tag to remove',
+      },
+    },
   })
 )
 

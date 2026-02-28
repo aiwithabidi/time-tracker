@@ -30,7 +30,8 @@ const tagCommand = define({
       }
 
       // Support both `tt tag -a billable` and `tt tag billable` (positional)
-      const addTag = ctx.values.add ?? ctx.positionals?.[0]
+      // positionals[0] is the command name ("tag"), positionals[1] is the actual argument
+      const addTag = ctx.values.add ?? ctx.positionals?.[1]
 
       if (!addTag || addTag.trim().length === 0) {
         errorOutput('No tag specified', 'Usage: tt tag billable or tt tag -a billable')
