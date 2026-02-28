@@ -11,6 +11,8 @@ import type {
   PulseOptions,
   PulseResult,
 } from './types'
+import { computeIdleState, computeIdleDeduction, type IdleConfig } from './idle-detector'
+import { loadConfig } from '../../config/config-loader'
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000
 const STALE_FALLBACK_DURATION_MS = 60 * 60 * 1000
@@ -29,6 +31,14 @@ function getStartOfToday(): number {
 function computeSessionDuration(session: Session): number {
   const end = session.endTime ?? Date.now()
   return Math.max(0, end - session.startTime - session.idleDeductedMs)
+}
+
+function loadIdleConfig(): IdleConfig {
+  const config = loadConfig()
+  return {
+    softIdleMs: config.idle.softIdleMinutes * 60 * 1000,
+    hardIdleMs: config.idle.hardIdleMinutes * 60 * 1000,
+  }
 }
 
 export function createSessionService(deps: SessionServiceDeps) {
@@ -405,32 +415,59 @@ export function createSessionService(deps: SessionServiceDeps) {
         return { action: 'created', session, project }
       }
 
+      // Idle reconciliation before writing pulse
+      const now = Date.now()
+      const lastSessionPulse = repos.pulses.getLatestForSession(existingSession.id)
+      let reconciledSession = existingSession
+
+      if (lastSessionPulse) {
+        const idleConfig = loadIdleConfig()
+        const idleState = computeIdleState(
+          lastSessionPulse.timestamp,
+          now,
+          existingSession.pausedAt,
+          idleConfig,
+        )
+
+        if (idleState === 'hard-idle') {
+          const deduction = computeIdleDeduction(lastSessionPulse.timestamp, now, idleConfig)
+          if (deduction > 0) {
+            reconciledSession = repos.sessions.resumeFromIdle(existingSession.id, deduction)
+          }
+        } else if (idleState === 'paused' && existingSession.pausedAt !== null) {
+          const breakDeduction = Math.max(0, now - existingSession.pausedAt)
+          if (breakDeduction > 0) {
+            reconciledSession = repos.sessions.resumeFromIdle(existingSession.id, breakDeduction)
+          }
+        }
+      }
+
       // Session exists — attach terminal if not already attached
-      const isAttached = repos.sessions.isTerminalAttached(existingSession.id, terminalId)
+      const isAttached = repos.sessions.isTerminalAttached(reconciledSession.id, terminalId)
       if (!isAttached) {
-        repos.sessions.attachTerminal(existingSession.id, terminalId)
+        repos.sessions.attachTerminal(reconciledSession.id, terminalId)
 
         repos.pulses.create({
           id: crypto.randomUUID(),
-          sessionId: existingSession.id,
+          sessionId: reconciledSession.id,
           terminalId,
           sourceType: source,
-          timestamp: Date.now(),
+          timestamp: now,
         })
 
-        return { action: 'attached', session: existingSession, project }
+        return { action: 'attached', session: reconciledSession, project }
       }
 
       // Already attached — just record the pulse
       repos.pulses.create({
         id: crypto.randomUUID(),
-        sessionId: existingSession.id,
+        sessionId: reconciledSession.id,
         terminalId,
         sourceType: source,
-        timestamp: Date.now(),
+        timestamp: now,
       })
 
-      return { action: 'pulsed', session: existingSession, project }
+      return { action: 'pulsed', session: reconciledSession, project }
     },
   }
 }

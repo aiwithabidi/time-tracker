@@ -1,4 +1,4 @@
-import { eq, and, isNull, gte, lte } from 'drizzle-orm'
+import { eq, and, isNull, gte, lte, sql } from 'drizzle-orm'
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite'
 import { sessions, sessionTerminals } from '../schema'
 import type * as schema from '../schema'
@@ -136,6 +136,42 @@ export function createSessionRepository(db: Db) {
         )
         .get()
       return result !== undefined
+    },
+
+    resumeFromIdle(id: string, deductionMs: number): Session {
+      db.update(sessions)
+        .set({
+          idleDeductedMs: sql`${sessions.idleDeductedMs} + ${deductionMs}`,
+          pausedAt: null,
+          updatedAt: Date.now(),
+        })
+        .where(eq(sessions.id, id))
+        .run()
+      const result = db
+        .select()
+        .from(sessions)
+        .where(eq(sessions.id, id))
+        .get()
+      if (!result) {
+        throw new Error(`Session not found: ${id}`)
+      }
+      return result
+    },
+
+    setPausedAt(id: string, pausedAt: number | null): Session {
+      db.update(sessions)
+        .set({ pausedAt, updatedAt: Date.now() })
+        .where(eq(sessions.id, id))
+        .run()
+      const result = db
+        .select()
+        .from(sessions)
+        .where(eq(sessions.id, id))
+        .get()
+      if (!result) {
+        throw new Error(`Session not found: ${id}`)
+      }
+      return result
     },
   }
 }
