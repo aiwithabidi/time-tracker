@@ -38,11 +38,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Idle Detection
 
-- [ ] **IDLE-01**: Soft idle at ~8 minutes with no activity pulses (flagged internally)
-- [ ] **IDLE-02**: Hard auto-pause at ~20 minutes with no activity pulses
-- [ ] **IDLE-03**: Auto-resume on next activity pulse (no manual action needed)
-- [ ] **IDLE-04**: Idle time is tracked separately (idle_deducted_ms) for audit
-- [ ] **IDLE-05**: User can declare intentional break with `tt away` and resume with `tt back`
+- [x] **IDLE-01**: Soft idle at ~8 minutes with no activity pulses (flagged internally)
+- [x] **IDLE-02**: Hard auto-pause at ~20 minutes with no activity pulses
+- [x] **IDLE-03**: Auto-resume on next activity pulse (no manual action needed)
+- [x] **IDLE-04**: Idle time is tracked separately (idle_deducted_ms) for audit
+- [x] **IDLE-05**: User can declare intentional break with `tt away` and resume with `tt back`
 
 ### Project Management
 
@@ -151,11 +151,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTO-04 | Phase 2 | Pending |
 | AUTO-05 | Phase 2 | Pending |
 | AUTO-06 | Phase 2 | Pending |
-| IDLE-01 | Phase 2 | Pending |
-| IDLE-02 | Phase 2 | Pending |
-| IDLE-03 | Phase 2 | Pending |
-| IDLE-04 | Phase 2 | Pending |
-| IDLE-05 | Phase 2 | Pending |
+| IDLE-01 | Phase 2 | Complete |
+| IDLE-02 | Phase 2 | Complete |
+| IDLE-03 | Phase 2 | Complete |
+| IDLE-04 | Phase 2 | Complete |
+| IDLE-05 | Phase 2 | Complete |
 | PROJ-01 | Phase 1 | Pending |
 | PROJ-02 | Phase 1 | Pending |
 | PROJ-03 | Phase 1 | Pending |

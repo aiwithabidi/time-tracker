@@ -5,32 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Effortless, accurate time tracking that works passively in the background
-**Current focus:** Phase 2 — Hook Integration (PLANNED)
+**Current focus:** Phase 2 — Hook Integration (IN PROGRESS)
 
 ## Current Position
 
-Phase: 2 of 5 (Hook Integration) — PLANNED
-Plan: 0 of 2 in current phase
-Status: Phase 2 planning complete — ready for execution
-Last activity: 2026-02-28 — Phase 2 plans created and verified
+Phase: 2 of 5 (Hook Integration) — IN PROGRESS
+Plan: 2 of 2 in current phase
+Status: Plan 02-02 complete — idle detection, away/back, enhanced now
+Last activity: 2026-02-28 — Plan 02-02 executed (5 tasks, 5 commits)
 
-Progress: [██░░░░░░░░] 20%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: ~5 min
-- Total execution time: ~0.25 hours
+- Total execution time: ~0.32 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 3/3 | ~15 min | ~5 min |
+| 02-hook-integration | 1/2 | ~4 min | ~4 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3 min), 01-02 (3.5 min), 01-03 (6 min)
+- Last 5 plans: 01-01 (3 min), 01-02 (3.5 min), 01-03 (6 min), 02-02 (4 min)
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -42,6 +43,9 @@ Progress: [██░░░░░░░░] 20%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Phase 2, Plan 02]: Idle detection is pure stateless computation -- no timers, computed on-demand from pulse timestamps
+- [Phase 2, Plan 02]: resumeFromIdle uses atomic SQL increment to prevent race conditions
+- [Phase 2, Plan 02]: Paused symbol uses yellow color matching stopped symbol
 - [Phase 1, Plan 03]: gunshi lazy() requires args metadata duplicated in registration for option parsing
 - [Phase 1, Plan 03]: gunshi positionals[0] contains command name; positional args start at index 1
 - [Phase 1, Plan 02]: Zod v4 .default({}) on objects requires explicit default values
@@ -67,5 +71,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Phase 1 execution complete — all 3 plans done
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
