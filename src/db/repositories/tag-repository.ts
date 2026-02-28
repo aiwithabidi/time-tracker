@@ -63,5 +63,21 @@ export function createTagRepository(db: Db) {
         .where(eq(sessionTags.sessionId, sessionId))
         .all()
     },
+
+    findBySessionId(sessionId: string): SessionTag[] {
+      return db
+        .select()
+        .from(sessionTags)
+        .where(eq(sessionTags.sessionId, sessionId))
+        .all()
+    },
+
+    deleteBySessionId(sessionId: string): void {
+      db.delete(sessionTags).where(eq(sessionTags.sessionId, sessionId)).run()
+    },
+
+    restoreTag(tag: SessionTag): void {
+      db.insert(sessionTags).values(tag).run()
+    },
   }
 }

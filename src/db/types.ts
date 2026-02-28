@@ -6,6 +6,7 @@ import type {
   sessionNotes,
   sessionTags,
   activityPulses,
+  undoLog,
 } from './schema'
 
 export type Project = InferSelectModel<typeof projects>
@@ -25,3 +26,6 @@ export type NewSessionTag = InferInsertModel<typeof sessionTags>
 
 export type ActivityPulse = InferSelectModel<typeof activityPulses>
 export type NewActivityPulse = InferInsertModel<typeof activityPulses>
+
+export type UndoLogEntry = InferSelectModel<typeof undoLog>
+export type NewUndoLogEntry = InferInsertModel<typeof undoLog>

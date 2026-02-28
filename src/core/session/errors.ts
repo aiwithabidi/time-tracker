@@ -26,3 +26,33 @@ export class InvalidTagError extends Error {
     this.name = 'InvalidTagError'
   }
 }
+
+export class SessionNotFoundError extends Error {
+  constructor(prefix: string) {
+    super(`No session found matching "${prefix}"`)
+    this.name = 'SessionNotFoundError'
+  }
+}
+
+export class AmbiguousIdError extends Error {
+  readonly candidates: string[]
+  constructor(prefix: string, candidates: string[]) {
+    super(`Ambiguous ID "${prefix}" matches: ${candidates.join(', ')}. Use more characters.`)
+    this.name = 'AmbiguousIdError'
+    this.candidates = candidates
+  }
+}
+
+export class NothingToUndoError extends Error {
+  constructor() {
+    super('Nothing to undo')
+    this.name = 'NothingToUndoError'
+  }
+}
+
+export class InvalidTimeRangeError extends Error {
+  constructor(detail: string) {
+    super(`Invalid time range: ${detail}`)
+    this.name = 'InvalidTimeRangeError'
+  }
+}

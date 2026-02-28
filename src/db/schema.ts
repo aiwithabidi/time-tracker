@@ -67,3 +67,10 @@ export const activityPulses = sqliteTable('activity_pulses', {
 }, (table) => [
   index('idx_activity_pulses_session_timestamp').on(table.sessionId, table.timestamp),
 ])
+
+export const undoLog = sqliteTable('undo_log', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
+  operation: text('operation').notNull(),
+  snapshot: text('snapshot').notNull(),
+  createdAt: integer('created_at', { mode: 'number' }).notNull(),
+})

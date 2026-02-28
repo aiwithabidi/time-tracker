@@ -1,4 +1,4 @@
-import type { Session, Project } from '../../db/types'
+import type { Session, Project, SessionNote, SessionTag } from '../../db/types'
 
 export interface SessionStartResult {
   action: 'created' | 'attached' | 'already_active'
@@ -56,4 +56,23 @@ export interface BackResult {
   readonly session: Session
   readonly project: Project
   readonly breakDurationMs: number
+}
+
+export interface EditOptions {
+  readonly start?: string
+  readonly end?: string
+  readonly project?: string
+  readonly note?: string
+  readonly tag?: string
+  readonly untag?: string
+}
+
+export interface EditResult {
+  readonly session: Session
+  readonly changes: string[]
+}
+
+export interface UndoResult {
+  readonly operation: string
+  readonly restoredSessionIds: string[]
 }

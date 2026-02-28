@@ -1,4 +1,4 @@
-import { eq, and, isNull, gte, lte, sql } from 'drizzle-orm'
+import { eq, and, isNull, gte, lte, sql, desc } from 'drizzle-orm'
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite'
 import { sessions, sessionTerminals } from '../schema'
 import type * as schema from '../schema'
@@ -171,6 +171,72 @@ export function createSessionRepository(db: Db) {
         .orderBy(sql`${sessions.endTime} DESC`)
         .limit(1)
         .get()
+    },
+
+    findByPrefix(prefix: string): Session {
+      if (prefix.length < 6) {
+        throw new Error('Session ID prefix must be at least 6 characters')
+      }
+      const rows = db
+        .select()
+        .from(sessions)
+        .where(
+          and(
+            sql`${sessions.id} LIKE ${prefix + '%'}`,
+            eq(sessions.isDeleted, false),
+          ),
+        )
+        .all()
+      if (rows.length === 0) {
+        throw new Error(`SESSION_NOT_FOUND:${prefix}`)
+      }
+      if (rows.length > 1) {
+        const candidates = rows.map(r => r.id.slice(0, 8)).join(', ')
+        throw new Error(`AMBIGUOUS_ID:${prefix}:${candidates}`)
+      }
+      return rows[0]!
+    },
+
+    update(id: string, changes: Partial<Pick<Session, 'startTime' | 'endTime' | 'projectId' | 'source' | 'idleDeductedMs' | 'isDeleted'>>): Session {
+      const now = Date.now()
+      db.update(sessions)
+        .set({ ...changes, updatedAt: now })
+        .where(eq(sessions.id, id))
+        .run()
+      const result = db
+        .select()
+        .from(sessions)
+        .where(eq(sessions.id, id))
+        .get()
+      if (!result) {
+        throw new Error(`Session not found: ${id}`)
+      }
+      return result
+    },
+
+    restore(session: Session): void {
+      db.insert(sessions)
+        .values(session)
+        .onConflictDoUpdate({
+          target: sessions.id,
+          set: {
+            projectId: session.projectId,
+            startTime: session.startTime,
+            endTime: session.endTime,
+            timezone: session.timezone,
+            source: session.source,
+            rateAtTime: session.rateAtTime,
+            pausedAt: session.pausedAt,
+            idleDeductedMs: session.idleDeductedMs,
+            isDeleted: session.isDeleted,
+            updatedAt: Date.now(),
+          },
+        })
+        .run()
+    },
+
+    hardDelete(id: string): void {
+      db.delete(sessions).where(eq(sessions.id, id)).run()
     },
 
     setPausedAt(id: string, pausedAt: number | null): Session {

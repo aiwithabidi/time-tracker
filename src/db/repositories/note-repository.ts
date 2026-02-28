@@ -36,5 +36,21 @@ export function createNoteRepository(db: Db) {
         .orderBy(asc(sessionNotes.createdAt))
         .all()
     },
+
+    findBySessionId(sessionId: string): SessionNote[] {
+      return db
+        .select()
+        .from(sessionNotes)
+        .where(eq(sessionNotes.sessionId, sessionId))
+        .all()
+    },
+
+    deleteBySessionId(sessionId: string): void {
+      db.delete(sessionNotes).where(eq(sessionNotes.sessionId, sessionId)).run()
+    },
+
+    restoreNote(note: SessionNote): void {
+      db.insert(sessionNotes).values(note).run()
+    },
   }
 }

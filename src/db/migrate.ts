@@ -71,6 +71,12 @@ CREATE INDEX IF NOT EXISTS idx_activity_pulses_session_timestamp ON activity_pul
 
 const MIGRATIONS_SQL = [
   `ALTER TABLE sessions ADD COLUMN paused_at INTEGER;`,
+  `CREATE TABLE IF NOT EXISTS undo_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  operation TEXT NOT NULL,
+  snapshot TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);`,
 ]
 
 export function ensureSchema(sqlite: Database): void {
