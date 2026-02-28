@@ -20,6 +20,8 @@ export interface SessionNowResult {
   durationMs: number
   todayTotalMs: number
   todaySessionCount: number
+  idleState: import('./idle-detector').IdleState | null
+  idleDurationMs: number
 }
 
 export interface SessionStartOptions {

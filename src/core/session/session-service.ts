@@ -282,12 +282,32 @@ export function createSessionService(deps: SessionServiceDeps) {
       const durationMs = activeSession ? computeSessionDuration(activeSession) : 0
       const { totalMs: todayTotalMs, sessionCount: todaySessionCount } = getTodayStats(project?.id)
 
+      let idleState: import('./idle-detector').IdleState | null = null
+      let idleDurationMs = 0
+
+      if (activeSession) {
+        const latestPulse = repos.pulses.getLatestForSession(activeSession.id)
+        if (latestPulse) {
+          const now = Date.now()
+          const idleConfig = loadIdleConfig()
+          idleState = computeIdleState(
+            latestPulse.timestamp,
+            now,
+            activeSession.pausedAt,
+            idleConfig,
+          )
+          idleDurationMs = now - latestPulse.timestamp
+        }
+      }
+
       return {
         session: activeSession ?? null,
         project: project ?? null,
         durationMs,
         todayTotalMs,
         todaySessionCount,
+        idleState,
+        idleDurationMs,
       }
     },
 
