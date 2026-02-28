@@ -131,62 +131,62 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FNDN-01 | — | Pending |
-| FNDN-02 | — | Pending |
-| FNDN-03 | — | Pending |
-| FNDN-04 | — | Pending |
-| FNDN-05 | — | Pending |
-| FNDN-06 | — | Pending |
-| FNDN-07 | — | Pending |
-| SESS-01 | — | Pending |
-| SESS-02 | — | Pending |
-| SESS-03 | — | Pending |
-| SESS-04 | — | Pending |
-| SESS-05 | — | Pending |
-| SESS-06 | — | Pending |
-| SESS-07 | — | Pending |
-| AUTO-01 | — | Pending |
-| AUTO-02 | — | Pending |
-| AUTO-03 | — | Pending |
-| AUTO-04 | — | Pending |
-| AUTO-05 | — | Pending |
-| AUTO-06 | — | Pending |
-| IDLE-01 | — | Pending |
-| IDLE-02 | — | Pending |
-| IDLE-03 | — | Pending |
-| IDLE-04 | — | Pending |
-| IDLE-05 | — | Pending |
-| PROJ-01 | — | Pending |
-| PROJ-02 | — | Pending |
-| PROJ-03 | — | Pending |
-| PROJ-04 | — | Pending |
-| PROJ-05 | — | Pending |
-| REPT-01 | — | Pending |
-| REPT-02 | — | Pending |
-| REPT-03 | — | Pending |
-| REPT-04 | — | Pending |
-| REPT-05 | — | Pending |
-| REPT-06 | — | Pending |
-| EXPT-01 | — | Pending |
-| EXPT-02 | — | Pending |
-| EXPT-03 | — | Pending |
-| CORR-01 | — | Pending |
-| CORR-02 | — | Pending |
-| CORR-03 | — | Pending |
-| CORR-04 | — | Pending |
-| CLCD-01 | — | Pending |
-| CLCD-02 | — | Pending |
-| CLCD-03 | — | Pending |
-| CLCD-04 | — | Pending |
-| CLCD-05 | — | Pending |
-| CLCD-06 | — | Pending |
-| CLCD-07 | — | Pending |
+| FNDN-01 | Phase 1 | Pending |
+| FNDN-02 | Phase 1 | Pending |
+| FNDN-03 | Phase 1 | Pending |
+| FNDN-04 | Phase 1 | Pending |
+| FNDN-05 | Phase 1 | Pending |
+| FNDN-06 | Phase 1 | Pending |
+| FNDN-07 | Phase 1 | Pending |
+| SESS-01 | Phase 1 | Pending |
+| SESS-02 | Phase 1 | Pending |
+| SESS-03 | Phase 1 | Pending |
+| SESS-04 | Phase 1 | Pending |
+| SESS-05 | Phase 1 | Pending |
+| SESS-06 | Phase 1 | Pending |
+| SESS-07 | Phase 1 | Pending |
+| AUTO-01 | Phase 2 | Pending |
+| AUTO-02 | Phase 2 | Pending |
+| AUTO-03 | Phase 2 | Pending |
+| AUTO-04 | Phase 2 | Pending |
+| AUTO-05 | Phase 2 | Pending |
+| AUTO-06 | Phase 2 | Pending |
+| IDLE-01 | Phase 2 | Pending |
+| IDLE-02 | Phase 2 | Pending |
+| IDLE-03 | Phase 2 | Pending |
+| IDLE-04 | Phase 2 | Pending |
+| IDLE-05 | Phase 2 | Pending |
+| PROJ-01 | Phase 1 | Pending |
+| PROJ-02 | Phase 1 | Pending |
+| PROJ-03 | Phase 1 | Pending |
+| PROJ-04 | Phase 3 | Pending |
+| PROJ-05 | Phase 1 | Pending |
+| REPT-01 | Phase 3 | Pending |
+| REPT-02 | Phase 3 | Pending |
+| REPT-03 | Phase 3 | Pending |
+| REPT-04 | Phase 3 | Pending |
+| REPT-05 | Phase 3 | Pending |
+| REPT-06 | Phase 3 | Pending |
+| EXPT-01 | Phase 3 | Pending |
+| EXPT-02 | Phase 3 | Pending |
+| EXPT-03 | Phase 3 | Pending |
+| CORR-01 | Phase 4 | Pending |
+| CORR-02 | Phase 4 | Pending |
+| CORR-03 | Phase 4 | Pending |
+| CORR-04 | Phase 4 | Pending |
+| CLCD-01 | Phase 5 | Pending |
+| CLCD-02 | Phase 5 | Pending |
+| CLCD-03 | Phase 5 | Pending |
+| CLCD-04 | Phase 5 | Pending |
+| CLCD-05 | Phase 5 | Pending |
+| CLCD-06 | Phase 5 | Pending |
+| CLCD-07 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 43 total
-- Mapped to phases: 0
-- Unmapped: 43
+- v1 requirements: 50 total
+- Mapped to phases: 50
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-27*
-*Last updated: 2026-02-27 after initial definition*
+*Last updated: 2026-02-27 after roadmap creation — all 50 requirements mapped*
