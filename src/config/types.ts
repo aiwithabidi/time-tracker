@@ -13,6 +13,10 @@ export const configSchema = z.object({
   defaults: z.object({
     currency: z.string().default('USD'),
   }).default({ currency: 'USD' }),
+  idle: z.object({
+    softIdleMinutes: z.number().min(1).default(8),
+    hardIdleMinutes: z.number().min(1).default(20),
+  }).default({ softIdleMinutes: 8, hardIdleMinutes: 20 }),
 })
 
 export type ProjectAlias = z.infer<typeof projectAliasSchema>
