@@ -12,7 +12,7 @@ Five phases take TimeTracker from zero to a fully integrated CLI time tracker. P
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - SQLite schema, repository layer, project inference, and manual start/stop/status commands
+- [x] **Phase 1: Foundation** - SQLite schema, repository layer, project inference, and manual start/stop/status commands
 - [ ] **Phase 2: Hook Integration** - Claude Code lifecycle hooks, activity pulses, idle detection, and startup reconciliation
 - [ ] **Phase 3: Reporting and Export** - Weekly and per-project reports, session history, billable totals, and CSV export
 - [ ] **Phase 4: Session Correction** - Edit, undo, split, and merge commands for billing-safe session correction
@@ -34,8 +34,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01: Database schema, WAL mode, and Drizzle repository layer
-- [ ] 01-02: ProjectResolver, compiled binary, and CLI entry point (gunshi)
-- [ ] 01-03: Session commands — start, stop, now, note, tag with singleton enforcement
+- [x] 01-02: ProjectResolver, compiled binary, and CLI entry point (gunshi)
+- [x] 01-03: Session commands — start, stop, now, note, tag with singleton enforcement
 
 ### Phase 2: Hook Integration
 **Goal**: Time tracking starts and stops automatically as Claude Code sessions begin and end, with idle time correctly excluded
@@ -47,11 +47,11 @@ Plans:
   3. Resuming activity in a paused session resumes tracking automatically without any manual command
   4. Running `tt away` then `tt back` correctly records an intentional break with idle_deducted_ms populated in the database
   5. Hook scripts complete in under 100ms measured end-to-end
-**Plans**: TBD
+**Plans**: Ready
 
 Plans:
-- [ ] 02-01: Shell hook scripts (SessionStart, Stop, PreToolUse, PostToolUse) and `tt pulse` subcommand
-- [ ] 02-02: IdleDetector with soft/hard thresholds, `tt away`/`tt back`, and startup reconciliation
+- [ ] 02-01: Shell hook scripts (SessionStart, Stop, PostToolUse), `tt pulse` subcommand, `tt setup` installer
+- [ ] 02-02: IdleDetector with soft/hard thresholds, `tt away`/`tt back`, idle integration in pulse flow
 
 ### Phase 3: Reporting and Export
 **Goal**: Users can see exactly where their billable hours went and export the data for client invoicing
@@ -106,7 +106,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 1/3 | In progress | - |
+| 1. Foundation | 3/3 | Complete | 2026-02-28 |
 | 2. Hook Integration | 0/2 | Not started | - |
 | 3. Reporting and Export | 0/2 | Not started | - |
 | 4. Session Correction | 0/2 | Not started | - |

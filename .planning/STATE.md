@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Effortless, accurate time tracking that works passively in the background
-**Current focus:** Phase 1 — Foundation
+**Current focus:** Phase 2 — Hook Integration (PLANNED)
 
 ## Current Position
 
-Phase: 1 of 5 (Foundation)
-Plan: 1 of 3 in current phase
-Status: Executing Phase 1 plans
-Last activity: 2026-02-28 — Plan 01-01 complete (database schema + repository layer)
+Phase: 2 of 5 (Hook Integration) — PLANNED
+Plan: 0 of 2 in current phase
+Status: Phase 2 planning complete — ready for execution
+Last activity: 2026-02-28 — Phase 2 plans created and verified
 
-Progress: [█░░░░░░░░░] 7%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 3 min
-- Total execution time: 0.05 hours
+- Total plans completed: 3
+- Average duration: ~5 min
+- Total execution time: ~0.25 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation | 1/3 | 3 min | 3 min |
+| 01-foundation | 3/3 | ~15 min | ~5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3 min)
-- Trend: Starting
+- Last 5 plans: 01-01 (3 min), 01-02 (3.5 min), 01-03 (6 min)
+- Trend: Consistent
 
 *Updated after each plan completion*
 
@@ -42,6 +42,9 @@ Progress: [█░░░░░░░░░] 7%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Phase 1, Plan 03]: gunshi lazy() requires args metadata duplicated in registration for option parsing
+- [Phase 1, Plan 03]: gunshi positionals[0] contains command name; positional args start at index 1
+- [Phase 1, Plan 02]: Zod v4 .default({}) on objects requires explicit default values
 - [Phase 1, Plan 01]: Programmatic CREATE TABLE IF NOT EXISTS instead of drizzle-kit migrations for zero-friction first use
 - [Phase 1, Plan 01]: Repository factory functions (not classes) returning plain objects for immutability
 - [Phase 1, Plan 01]: crypto.randomUUID() for all entity IDs (zero deps, built into Bun)
@@ -57,12 +60,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Phase 2]: gunshi ^0.27 is under active development — verify current API surface against GitHub before Phase 1 starts
+- [Phase 2]: gunshi ^0.27 is under active development — verify current API surface against GitHub before Phase 2 starts
 - [Phase 2]: Claude Code Stop/SessionStart hooks are unreliable in production (issues #3113, #16047, #10373, #19225, #23359) — hook integration needs careful reliability design; plan `/gsd:research-phase` before Phase 2
 - [Phase 1]: TT_TERMINAL_ID onboarding mechanism (shell profile additions) needs explicit design — an `tt setup` command or install script is needed but not yet specified
 
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Completed 01-01-PLAN.md
+Stopped at: Phase 1 execution complete — all 3 plans done
 Resume file: None
