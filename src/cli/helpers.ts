@@ -9,6 +9,8 @@ import {
   AmbiguousIdError,
   NothingToUndoError,
   InvalidTimeRangeError,
+  InvalidSplitTimeError,
+  MergeValidationError,
 } from '../core/session/index'
 import { createReportService as createReport, type ReportService } from '../core/reports/index'
 import { errorOutput } from './format'
@@ -68,6 +70,18 @@ export function handleCommandError(err: unknown): void {
   }
 
   if (err instanceof InvalidTimeRangeError) {
+    errorOutput(err.message)
+    process.exitCode = 1
+    return
+  }
+
+  if (err instanceof InvalidSplitTimeError) {
+    errorOutput(err.message)
+    process.exitCode = 1
+    return
+  }
+
+  if (err instanceof MergeValidationError) {
     errorOutput(err.message)
     process.exitCode = 1
     return

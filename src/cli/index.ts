@@ -277,6 +277,41 @@ subCommands.set(
   })
 )
 
+subCommands.set(
+  'split',
+  lazy(() => import('./commands/split').then((m) => m.default), {
+    name: 'split',
+    description: 'Split a session at a given time',
+    args: {
+      yes: {
+        type: 'boolean',
+        short: 'y',
+        description: 'Skip confirmation prompt',
+      },
+    },
+  })
+)
+
+subCommands.set(
+  'merge',
+  lazy(() => import('./commands/merge').then((m) => m.default), {
+    name: 'merge',
+    description: 'Merge two adjacent sessions',
+    args: {
+      yes: {
+        type: 'boolean',
+        short: 'y',
+        description: 'Skip confirmation prompt',
+      },
+      force: {
+        type: 'boolean',
+        short: 'f',
+        description: 'Allow merge with gap > 60 minutes',
+      },
+    },
+  })
+)
+
 await cli(process.argv.slice(2), mainCommand, {
   name: 'tt',
   description: 'Time tracking for developers',
