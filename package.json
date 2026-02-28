@@ -4,6 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "build": "bun build --compile src/cli/index.ts --outfile dist/tt --minify",
+    "dev": "bun run src/cli/index.ts",
     "db:push": "bunx drizzle-kit push",
     "typecheck": "bunx tsc --noEmit"
   },
