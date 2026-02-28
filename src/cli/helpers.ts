@@ -1,7 +1,15 @@
 import { getDb } from '../db/client'
 import { createRepositories } from '../db/repositories/index'
 import { createSessionService as createService, type SessionService } from '../core/session/index'
-import { NoActiveSessionError, NoProjectFoundError, InvalidTagError } from '../core/session/index'
+import {
+  NoActiveSessionError,
+  NoProjectFoundError,
+  InvalidTagError,
+  SessionNotFoundError,
+  AmbiguousIdError,
+  NothingToUndoError,
+  InvalidTimeRangeError,
+} from '../core/session/index'
 import { createReportService as createReport, type ReportService } from '../core/reports/index'
 import { errorOutput } from './format'
 
@@ -36,6 +44,30 @@ export function handleCommandError(err: unknown): void {
   }
 
   if (err instanceof InvalidTagError) {
+    errorOutput(err.message)
+    process.exitCode = 1
+    return
+  }
+
+  if (err instanceof SessionNotFoundError) {
+    errorOutput(err.message)
+    process.exitCode = 1
+    return
+  }
+
+  if (err instanceof AmbiguousIdError) {
+    errorOutput(err.message)
+    process.exitCode = 1
+    return
+  }
+
+  if (err instanceof NothingToUndoError) {
+    errorOutput(err.message)
+    process.exitCode = 1
+    return
+  }
+
+  if (err instanceof InvalidTimeRangeError) {
     errorOutput(err.message)
     process.exitCode = 1
     return

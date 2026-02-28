@@ -232,6 +232,51 @@ subCommands.set(
   })
 )
 
+subCommands.set(
+  'edit',
+  lazy(() => import('./commands/edit').then((m) => m.default), {
+    name: 'edit',
+    description: 'Edit a past session',
+    args: {
+      start: {
+        type: 'string',
+        description: 'New start time (HH:mm or ISO 8601)',
+      },
+      end: {
+        type: 'string',
+        description: 'New end time (HH:mm or ISO 8601)',
+      },
+      project: {
+        type: 'string',
+        short: 'p',
+        description: 'Reassign to project slug',
+      },
+      note: {
+        type: 'string',
+        short: 'n',
+        description: 'Append a note',
+      },
+      tag: {
+        type: 'string',
+        short: 't',
+        description: 'Add a tag',
+      },
+      untag: {
+        type: 'string',
+        description: 'Remove a tag',
+      },
+    },
+  })
+)
+
+subCommands.set(
+  'undo',
+  lazy(() => import('./commands/undo').then((m) => m.default), {
+    name: 'undo',
+    description: 'Undo the last state-changing operation',
+  })
+)
+
 await cli(process.argv.slice(2), mainCommand, {
   name: 'tt',
   description: 'Time tracking for developers',
