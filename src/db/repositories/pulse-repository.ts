@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, and, sql } from 'drizzle-orm'
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite'
 import { activityPulses } from '../schema'
 import type * as schema from '../schema'
@@ -43,6 +43,33 @@ export function createPulseRepository(db: Db) {
         .orderBy(desc(activityPulses.timestamp))
         .limit(1)
         .get()
+    },
+
+    reassignPulses(fromSessionId: string, toSessionId: string, beforeTimestamp?: number): void {
+      if (beforeTimestamp !== undefined) {
+        db.update(activityPulses)
+          .set({ sessionId: toSessionId })
+          .where(
+            and(
+              eq(activityPulses.sessionId, fromSessionId),
+              sql`${activityPulses.timestamp} < ${beforeTimestamp}`,
+            ),
+          )
+          .run()
+      } else {
+        db.update(activityPulses)
+          .set({ sessionId: toSessionId })
+          .where(eq(activityPulses.sessionId, fromSessionId))
+          .run()
+      }
+    },
+
+    findBySessionId(sessionId: string): ActivityPulse[] {
+      return db
+        .select()
+        .from(activityPulses)
+        .where(eq(activityPulses.sessionId, sessionId))
+        .all()
     },
   }
 }

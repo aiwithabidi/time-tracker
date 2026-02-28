@@ -1,4 +1,4 @@
-import type { Session, Project, SessionNote, SessionTag } from '../../db/types'
+import type { Session, Project } from '../../db/types'
 
 export interface SessionStartResult {
   action: 'created' | 'attached' | 'already_active'
@@ -75,4 +75,44 @@ export interface EditResult {
 export interface UndoResult {
   readonly operation: string
   readonly restoredSessionIds: string[]
+}
+
+export interface SplitPreview {
+  readonly original: Session
+  readonly sessionA: {
+    readonly startTime: number
+    readonly endTime: number
+    readonly durationMs: number
+    readonly idleDeductedMs: number
+  }
+  readonly sessionB: {
+    readonly startTime: number
+    readonly endTime: number
+    readonly durationMs: number
+    readonly idleDeductedMs: number
+  }
+}
+
+export interface SplitResult {
+  readonly sessionA: Session
+  readonly sessionB: Session
+  readonly originalId: string
+}
+
+export interface MergePreview {
+  readonly earlier: Session
+  readonly later: Session
+  readonly gapMs: number
+  readonly merged: {
+    readonly startTime: number
+    readonly endTime: number
+    readonly durationMs: number
+    readonly idleDeductedMs: number
+  }
+  readonly requiresForce: boolean
+}
+
+export interface MergeResult {
+  readonly merged: Session
+  readonly removedIds: string[]
 }

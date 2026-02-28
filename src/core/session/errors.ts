@@ -56,3 +56,18 @@ export class InvalidTimeRangeError extends Error {
     this.name = 'InvalidTimeRangeError'
   }
 }
+
+export class InvalidSplitTimeError extends Error {
+  constructor(splitTime: number, startTime: number, endTime: number) {
+    const fmt = (ms: number) => new Date(ms).toISOString()
+    super(`Split time ${fmt(splitTime)} is outside session bounds ${fmt(startTime)} - ${fmt(endTime)}`)
+    this.name = 'InvalidSplitTimeError'
+  }
+}
+
+export class MergeValidationError extends Error {
+  constructor(reason: string) {
+    super(`Cannot merge: ${reason}`)
+    this.name = 'MergeValidationError'
+  }
+}
