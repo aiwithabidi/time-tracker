@@ -59,13 +59,13 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **REPT-03**: User can browse session history with `tt log` (filterable by project, date range)
 - [x] **REPT-04**: User can see the last completed session with `tt last`
 - [x] **REPT-05**: All time displays use human-readable format (Xh Ym), never raw seconds
-- [ ] **REPT-06**: User can see billable totals per project (hours x rate = dollar amount) with `tt week --billable`
+- [x] **REPT-06**: User can see billable totals per project (hours x rate = dollar amount) with `tt week --billable`
 
 ### Export
 
-- [ ] **EXPT-01**: User can export sessions to CSV with `tt export csv --project=x --from=DATE --to=DATE`
-- [ ] **EXPT-02**: Export includes project, date, start time, end time, duration, notes, tags
-- [ ] **EXPT-03**: Export supports --dry-run to preview without writing file
+- [x] **EXPT-01**: User can export sessions to CSV with `tt export csv --project=x --from=DATE --to=DATE`
+- [x] **EXPT-02**: Export includes project, date, start time, end time, duration, notes, tags
+- [x] **EXPT-03**: Export supports --dry-run to preview without writing file
 
 ### Session Correction
 
@@ -166,10 +166,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REPT-03 | Phase 3 | Complete |
 | REPT-04 | Phase 3 | Complete |
 | REPT-05 | Phase 3 | Complete |
-| REPT-06 | Phase 3 | Pending |
-| EXPT-01 | Phase 3 | Pending |
-| EXPT-02 | Phase 3 | Pending |
-| EXPT-03 | Phase 3 | Pending |
+| REPT-06 | Phase 3 | Complete |
+| EXPT-01 | Phase 3 | Complete |
+| EXPT-02 | Phase 3 | Complete |
+| EXPT-03 | Phase 3 | Complete |
 | CORR-01 | Phase 4 | Pending |
 | CORR-02 | Phase 4 | Pending |
 | CORR-03 | Phase 4 | Pending |

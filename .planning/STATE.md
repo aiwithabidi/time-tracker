@@ -5,22 +5,22 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Effortless, accurate time tracking that works passively in the background
-**Current focus:** Phase 3 — Reporting and Export (in progress)
+**Current focus:** Phase 3 — Reporting and Export (COMPLETE)
 
 ## Current Position
 
-Phase: 3 of 5 (Reporting and Export) — IN PROGRESS
-Plan: 1 of 2 in current phase (Plan 01 complete)
-Status: Plan 03-01 complete — reporting engine with 5 CLI commands
-Last activity: 2026-02-28 — Phase 3 Plan 01 executed (3 tasks, 3 commits)
+Phase: 3 of 5 (Reporting and Export) — COMPLETE
+Plan: 2 of 2 in current phase (all plans complete)
+Status: Phase 3 complete — CSV export, billable reports, reporting engine with 7 CLI commands
+Last activity: 2026-02-28 — Phase 3 Plan 02 executed (2 tasks, 2 commits)
 
-Progress: [██████░░░░] 60%
+Progress: [████████░░] 70%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: ~5 min
+- Total plans completed: 7
+- Average duration: ~4 min
 - Total execution time: ~0.5 hours
 
 **By Phase:**
@@ -29,10 +29,10 @@ Progress: [██████░░░░] 60%
 |-------|-------|-------|----------|
 | 01-foundation | 3/3 | ~15 min | ~5 min |
 | 02-hook-integration | 2/2 | ~7 min | ~3.5 min |
-| 03-reporting-export | 1/2 | ~7 min | ~7 min |
+| 03-reporting-export | 2/2 | ~9 min | ~4.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (6 min), 02-01 (3 min), 02-02 (4 min), 03-01 (7 min)
+- Last 5 plans: 02-01 (3 min), 02-02 (4 min), 03-01 (7 min), 03-02 (2 min)
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -44,6 +44,8 @@ Progress: [██████░░░░] 60%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Phase 3, Plan 02]: CSV to stdout and dry-run to stderr for clean shell piping
+- [Phase 3, Plan 02]: ExportService follows same factory pattern as ReportService and SessionService
 - [Phase 3, Plan 01]: ReportService follows same factory pattern as SessionService (createReportService with repos dep injection)
 - [Phase 3, Plan 01]: cli-table3 ships bundled types, no separate @types package needed
 - [Phase 2, Plan 02]: Idle detection is pure stateless computation -- no timers, computed on-demand from pulse timestamps
@@ -74,5 +76,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Completed 03-01-PLAN.md
+Stopped at: Completed 03-02-PLAN.md (Phase 3 complete)
 Resume file: None
