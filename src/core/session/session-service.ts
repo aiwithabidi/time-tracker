@@ -9,6 +9,8 @@ import {
   AmbiguousIdError,
   NothingToUndoError,
   InvalidTimeRangeError,
+  InvalidSplitTimeError,
+  MergeValidationError,
 } from './errors'
 import type {
   SessionStartResult,
@@ -23,6 +25,10 @@ import type {
   EditOptions,
   EditResult,
   UndoResult,
+  SplitPreview,
+  SplitResult,
+  MergePreview,
+  MergeResult,
 } from './types'
 import type { SessionNote, SessionTag } from '../../db/types'
 import type { UndoSnapshot } from '../../db/repositories/undo-repository'
@@ -151,6 +157,97 @@ export function createSessionService(deps: SessionServiceDeps) {
         }
       }
       throw err
+    }
+  }
+
+  function splitIdleDeducted(
+    originalIdleMs: number,
+    totalWallMs: number,
+    wallAMs: number,
+  ): { idleA: number; idleB: number } {
+    if (totalWallMs === 0) return { idleA: 0, idleB: 0 }
+    const idleA = Math.max(0, Math.round(originalIdleMs * (wallAMs / totalWallMs)))
+    const idleB = Math.max(0, originalIdleMs - idleA)
+    return { idleA, idleB }
+  }
+
+  function previewSplitInternal(sessionPrefix: string, splitTimeInput: string): SplitPreview {
+    const session = resolveSessionByPrefix(sessionPrefix)
+
+    if (!session.endTime) {
+      throw new InvalidTimeRangeError('Cannot split an active session. Stop it first.')
+    }
+
+    const splitMs = parseEditTime(splitTimeInput, session.startTime)
+
+    if (splitMs <= session.startTime || splitMs >= session.endTime) {
+      throw new InvalidSplitTimeError(splitMs, session.startTime, session.endTime)
+    }
+
+    const totalWall = session.endTime - session.startTime
+    const wallA = splitMs - session.startTime
+    const wallB = session.endTime - splitMs
+    const { idleA, idleB } = splitIdleDeducted(session.idleDeductedMs, totalWall, wallA)
+
+    return {
+      original: session,
+      sessionA: {
+        startTime: session.startTime,
+        endTime: splitMs,
+        durationMs: Math.max(0, wallA - idleA),
+        idleDeductedMs: idleA,
+      },
+      sessionB: {
+        startTime: splitMs,
+        endTime: session.endTime,
+        durationMs: Math.max(0, wallB - idleB),
+        idleDeductedMs: idleB,
+      },
+    }
+  }
+
+  function previewMergeInternal(prefixA: string, prefixB: string): MergePreview {
+    const sessionA = resolveSessionByPrefix(prefixA)
+    const sessionB = resolveSessionByPrefix(prefixB)
+
+    if (!sessionA.endTime) {
+      throw new MergeValidationError(`Session ${prefixA} is still active. Stop it first.`)
+    }
+    if (!sessionB.endTime) {
+      throw new MergeValidationError(`Session ${prefixB} is still active. Stop it first.`)
+    }
+
+    if (sessionA.projectId !== sessionB.projectId) {
+      throw new MergeValidationError(
+        'Sessions belong to different projects. Reassign with "tt edit <id> --project <slug>" first.'
+      )
+    }
+
+    const [earlier, later] = sessionA.startTime <= sessionB.startTime
+      ? [sessionA, sessionB]
+      : [sessionB, sessionA]
+
+    const gapMs = Math.max(0, later.startTime - earlier.endTime!)
+
+    const FORCE_GAP_THRESHOLD_MS = 60 * 60 * 1000
+    const requiresForce = gapMs > FORCE_GAP_THRESHOLD_MS
+
+    const mergedIdleMs = earlier.idleDeductedMs + later.idleDeductedMs + gapMs
+    const mergedStartTime = earlier.startTime
+    const mergedEndTime = later.endTime!
+    const mergedDurationMs = Math.max(0, mergedEndTime - mergedStartTime - mergedIdleMs)
+
+    return {
+      earlier,
+      later,
+      gapMs,
+      merged: {
+        startTime: mergedStartTime,
+        endTime: mergedEndTime,
+        durationMs: mergedDurationMs,
+        idleDeductedMs: mergedIdleMs,
+      },
+      requiresForce,
     }
   }
 
@@ -734,6 +831,145 @@ export function createSessionService(deps: SessionServiceDeps) {
       })
 
       return { session: updatedSession, project, breakDurationMs }
+    },
+
+    previewSplit(sessionPrefix: string, splitTimeInput: string): SplitPreview {
+      return previewSplitInternal(sessionPrefix, splitTimeInput)
+    },
+
+    split(sessionPrefix: string, splitTimeInput: string): SplitResult {
+      const preview = previewSplitInternal(sessionPrefix, splitTimeInput)
+      const session = preview.original
+
+      return withTransaction(() => {
+        const snapshot = buildSnapshot([session.id])
+
+        const idA = crypto.randomUUID()
+        const idB = crypto.randomUUID()
+
+        const snapshotWithDeleted: UndoSnapshot = {
+          ...snapshot,
+          deletedSessionIds: [idA, idB],
+        }
+        repos.undo.push('split', snapshotWithDeleted)
+
+        repos.sessions.softDelete(session.id)
+
+        const now = Date.now()
+        const sessionA = repos.sessions.create({
+          id: idA,
+          projectId: session.projectId,
+          startTime: preview.sessionA.startTime,
+          endTime: preview.sessionA.endTime,
+          timezone: session.timezone,
+          source: session.source,
+          rateAtTime: session.rateAtTime,
+          idleDeductedMs: preview.sessionA.idleDeductedMs,
+          isDeleted: false,
+          createdAt: now,
+          updatedAt: now,
+        })
+
+        const sessionB = repos.sessions.create({
+          id: idB,
+          projectId: session.projectId,
+          startTime: preview.sessionB.startTime,
+          endTime: preview.sessionB.endTime,
+          timezone: session.timezone,
+          source: session.source,
+          rateAtTime: session.rateAtTime,
+          idleDeductedMs: preview.sessionB.idleDeductedMs,
+          isDeleted: false,
+          createdAt: now,
+          updatedAt: now,
+        })
+
+        const notes = repos.notes.findBySessionId(session.id)
+        const tags = repos.tags.findBySessionId(session.id)
+
+        for (const note of notes) {
+          repos.notes.create(sessionA.id, note.content)
+          repos.notes.create(sessionB.id, note.content)
+        }
+
+        for (const tag of tags) {
+          repos.tags.addTag(sessionA.id, tag.tag)
+          repos.tags.addTag(sessionB.id, tag.tag)
+        }
+
+        const splitMs = preview.sessionA.endTime
+        repos.pulses.reassignPulses(session.id, idA, splitMs)
+        repos.pulses.reassignPulses(session.id, idB)
+
+        return { sessionA, sessionB, originalId: session.id }
+      })
+    },
+
+    previewMerge(prefixA: string, prefixB: string): MergePreview {
+      return previewMergeInternal(prefixA, prefixB)
+    },
+
+    merge(prefixA: string, prefixB: string, force: boolean = false): MergeResult {
+      const preview = previewMergeInternal(prefixA, prefixB)
+
+      if (preview.requiresForce && !force) {
+        throw new MergeValidationError(
+          `Gap between sessions is ${Math.round(preview.gapMs / 60000)} minutes (> 60 min threshold). Use --force to proceed.`
+        )
+      }
+
+      const { earlier, later } = preview
+
+      return withTransaction(() => {
+        const snapshotEarlier = buildSnapshot([earlier.id])
+        const snapshotLater = buildSnapshot([later.id])
+
+        const mergedId = crypto.randomUUID()
+
+        const combinedSnapshot: UndoSnapshot = {
+          sessions: [...snapshotEarlier.sessions, ...snapshotLater.sessions],
+          notes: [...snapshotEarlier.notes, ...snapshotLater.notes],
+          tags: [...snapshotEarlier.tags, ...snapshotLater.tags],
+          deletedSessionIds: [mergedId],
+        }
+        repos.undo.push('merge', combinedSnapshot)
+
+        repos.sessions.softDelete(earlier.id)
+        repos.sessions.softDelete(later.id)
+
+        const now = Date.now()
+        const merged = repos.sessions.create({
+          id: mergedId,
+          projectId: earlier.projectId,
+          startTime: preview.merged.startTime,
+          endTime: preview.merged.endTime,
+          timezone: earlier.timezone,
+          source: 'merged',
+          rateAtTime: earlier.rateAtTime,
+          idleDeductedMs: preview.merged.idleDeductedMs,
+          isDeleted: false,
+          createdAt: now,
+          updatedAt: now,
+        })
+
+        const earlierNotes = repos.notes.findBySessionId(earlier.id)
+        const laterNotes = repos.notes.findBySessionId(later.id)
+        for (const note of [...earlierNotes, ...laterNotes]) {
+          repos.notes.create(merged.id, note.content)
+        }
+
+        const earlierTags = repos.tags.findBySessionId(earlier.id)
+        const laterTags = repos.tags.findBySessionId(later.id)
+        const allTagNames = new Set([...earlierTags.map(t => t.tag), ...laterTags.map(t => t.tag)])
+        for (const tagName of allTagNames) {
+          repos.tags.addTag(merged.id, tagName)
+        }
+
+        repos.pulses.reassignPulses(earlier.id, mergedId)
+        repos.pulses.reassignPulses(later.id, mergedId)
+
+        return { merged, removedIds: [earlier.id, later.id] }
+      })
     },
   }
 }
