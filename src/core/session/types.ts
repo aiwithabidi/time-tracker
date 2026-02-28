@@ -29,3 +29,16 @@ export interface SessionStartOptions {
 export interface SessionStopOptions {
   projectOverride?: string
 }
+
+export interface PulseOptions {
+  readonly cwd: string
+  readonly source: string
+  readonly terminalId: string
+  readonly claudeSessionId?: string
+}
+
+export interface PulseResult {
+  readonly action: 'created' | 'attached' | 'pulsed' | 'rate-limited'
+  readonly session?: Session
+  readonly project?: Project
+}

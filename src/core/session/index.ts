@@ -6,4 +6,6 @@ export type {
   SessionNowResult,
   SessionStartOptions,
   SessionStopOptions,
+  PulseOptions,
+  PulseResult,
 } from './types'

@@ -8,10 +8,13 @@ import type {
   SessionNowResult,
   SessionStartOptions,
   SessionStopOptions,
+  PulseOptions,
+  PulseResult,
 } from './types'
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000
 const STALE_FALLBACK_DURATION_MS = 60 * 60 * 1000
+const PULSE_RATE_LIMIT_MS = 60_000
 const KEBAB_CASE_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 interface SessionServiceDeps {
@@ -343,6 +346,91 @@ export function createSessionService(deps: SessionServiceDeps) {
       }
 
       repos.tags.removeTag(activeSession.id, tag)
+    },
+
+    pulse(options: PulseOptions): PulseResult {
+      const { cwd, source, terminalId } = options
+
+      // Rate limit check: if last pulse for this terminal was within threshold, skip
+      const latestPulse = repos.pulses.getLatestForTerminal(terminalId)
+      if (latestPulse && (Date.now() - latestPulse.timestamp) < PULSE_RATE_LIMIT_MS) {
+        return { action: 'rate-limited' }
+      }
+
+      // Resolve project from cwd
+      let resolved: ResolvedProject
+      let project: Project
+      try {
+        resolved = resolveProject(cwd)
+        project = ensureProjectInDb(resolved, repos.projects)
+      } catch {
+        // Cannot resolve project — nothing to pulse
+        return { action: 'rate-limited' }
+      }
+
+      // Close stale sessions first
+      const allActive = repos.sessions.findActiveAll()
+      for (const activeSession of allActive) {
+        closeStaleSession(activeSession)
+      }
+
+      // Find active session for this project
+      const existingSession = repos.sessions.findActiveByProject(project.id)
+
+      if (!existingSession) {
+        // Auto-create a new session
+        const now = Date.now()
+        const session = repos.sessions.create({
+          id: crypto.randomUUID(),
+          projectId: project.id,
+          startTime: now,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          source,
+          rateAtTime: project.hourlyRate ?? null,
+          idleDeductedMs: 0,
+          isDeleted: false,
+          createdAt: now,
+          updatedAt: now,
+        })
+
+        repos.sessions.attachTerminal(session.id, terminalId)
+        repos.pulses.create({
+          id: crypto.randomUUID(),
+          sessionId: session.id,
+          terminalId,
+          sourceType: source,
+          timestamp: now,
+        })
+
+        return { action: 'created', session, project }
+      }
+
+      // Session exists — attach terminal if not already attached
+      const isAttached = repos.sessions.isTerminalAttached(existingSession.id, terminalId)
+      if (!isAttached) {
+        repos.sessions.attachTerminal(existingSession.id, terminalId)
+
+        repos.pulses.create({
+          id: crypto.randomUUID(),
+          sessionId: existingSession.id,
+          terminalId,
+          sourceType: source,
+          timestamp: Date.now(),
+        })
+
+        return { action: 'attached', session: existingSession, project }
+      }
+
+      // Already attached — just record the pulse
+      repos.pulses.create({
+        id: crypto.randomUUID(),
+        sessionId: existingSession.id,
+        terminalId,
+        sourceType: source,
+        timestamp: Date.now(),
+      })
+
+      return { action: 'pulsed', session: existingSession, project }
     },
   }
 }

@@ -83,6 +83,37 @@ subCommands.set(
   })
 )
 
+subCommands.set(
+  'pulse',
+  lazy(() => import('./commands/pulse').then((m) => m.default), {
+    name: 'pulse',
+    description: 'Record an activity heartbeat (used by shell hooks)',
+    args: {
+      source: {
+        type: 'string',
+        short: 's',
+        description: 'Hook source (claude-startup, claude-resume, post-tool-use, stop, manual)',
+        required: true,
+      },
+      cwd: {
+        type: 'string',
+        short: 'c',
+        description: 'Working directory for project inference',
+        required: true,
+      },
+      'session-id': {
+        type: 'string',
+        description: 'Claude session ID for correlation',
+      },
+      'terminal-id': {
+        type: 'string',
+        short: 't',
+        description: 'Override TT_TERMINAL_ID env var',
+      },
+    },
+  })
+)
+
 await cli(process.argv.slice(2), mainCommand, {
   name: 'tt',
   description: 'Time tracking for developers',
