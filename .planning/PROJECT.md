@@ -27,15 +27,15 @@ Effortless, accurate time tracking that works passively in the background — th
 - Session correction (edit, undo, split, merge) with atomic undo snapshots — v1.0
 - Claude Code slash commands (/tt, /tt:week, /tt:note, /tt:start, /tt:stop, /tt:projects, /tt:edit, /tt:review) — v1.0
 
-### Active (v1.1 Hardening)
+### Validated (v1.1 Hardening) — Shipped 2026-02-28
 
-- [ ] Security hardening — shell injection, path traversal, deserialization, race conditions, file permissions — v1.1
-- [ ] Correctness fixes — timezone bug, N+1 queries, dead code, migration error handling — v1.1
-- [ ] Performance — config caching, git root caching on pulse hot path — v1.1
-- [ ] Code quality — split god-service, extract shared utilities, error class hierarchy — v1.1
-- [ ] Test suite — vitest unit tests + bun integration tests, 80% coverage — v1.1
-- [ ] `tt alias add` CLI command for project alias management — v1.1
-- [ ] `tt rate set` CLI command for hourly rate management — v1.1
+- Security hardening — 8 fixes (injection, traversal, deserialization, race conditions, permissions, limits, logging) — v1.1
+- Correctness fixes — timezone, N+1, dead code, migration errors, LIKE escaping — v1.1
+- Performance — config cached at service creation, git root cached per cwd — v1.1
+- Code quality — session-service split (977→45 lines facade), shared utilities, error hierarchy — v1.1
+- Test suite — 177 tests (146 unit + 31 integration), 96% statement coverage — v1.1
+- `tt alias add/list/remove` and `tt rate set/show` CLI commands — v1.1
+- 22 CLI commands total (up from 20) — v1.1
 
 ### Backlog
 
@@ -57,7 +57,7 @@ Effortless, accurate time tracking that works passively in the background — th
 
 ## Context
 
-- Shipped v1.0 with 5,411 LOC TypeScript across 114 files; v1.1 hardening in progress
+- v1.0 shipped with 5,411 LOC; v1.1 hardening shipped with 9,472 LOC (177 tests)
 - Tech stack: Bun + bun:sqlite + drizzle-orm + gunshi + luxon + chalk + cli-table3 + zod
 - Compiled binary (dist/tt) starts in <100ms
 - Developer works in Ghostty terminal, 4-8 active client projects at any time
@@ -89,6 +89,9 @@ Effortless, accurate time tracking that works passively in the background — th
 | Repository factory functions | Plain objects, not classes; immutable returns | Good |
 | gunshi for CLI framework | Lazy loading, TypeScript-first, small bundle | Good |
 | CSV to stdout, messages to stderr | Clean shell piping (`tt export csv > report.csv`) | Good |
+| Split god-service into facade + 3 services | Keeps files under 800 lines, separation of concerns | Good |
+| vitest (unit) + bun test (integration) | vitest can't import bun:sqlite; dual runner solves it | Good |
+| Base TimeTrackerError class | Simplified error handling from 9-branch instanceof to single check | Good |
 
 ---
-*Last updated: 2026-02-28 after v1.1 milestone planning*
+*Last updated: 2026-02-28 after v1.1 milestone shipped*
