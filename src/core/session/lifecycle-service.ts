@@ -189,6 +189,16 @@ export function createLifecycleService(deps: LifecycleServiceDeps) {
       const stoppedSession = repos.sessions.stop(activeSession.id, endTime)
       const durationMs = computeSessionDuration(stoppedSession)
 
+      // Write a stop pulse so the 60s rate limit prevents auto-restart
+      // from SessionStart hook firing immediately after manual stop
+      repos.pulses.create({
+        id: crypto.randomUUID(),
+        sessionId: activeSession.id,
+        terminalId,
+        sourceType: 'manual-stop',
+        timestamp: endTime,
+      })
+
       return {
         session: stoppedSession,
         project,

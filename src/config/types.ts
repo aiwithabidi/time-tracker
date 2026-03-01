@@ -17,6 +17,7 @@ export const configSchema = z.object({
     softIdleMinutes: z.number().min(1).default(8),
     hardIdleMinutes: z.number().min(1).default(20),
   }).default({ softIdleMinutes: 8, hardIdleMinutes: 20 }),
+  sourceRepo: z.string().optional(),
 })
 
 export type ProjectAlias = z.infer<typeof projectAliasSchema>

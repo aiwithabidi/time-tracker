@@ -1,4 +1,5 @@
 import { cli, define, lazy } from 'gunshi'
+import { VERSION } from './version'
 
 const mainCommand = define({
   name: 'tt',
@@ -388,9 +389,36 @@ subCommands.set(
   })
 )
 
+subCommands.set(
+  'version',
+  lazy(() => import('./commands/version').then((m) => m.default), {
+    name: 'version',
+    description: 'Show tt version and update status',
+  })
+)
+
+subCommands.set(
+  'update',
+  lazy(() => import('./commands/update').then((m) => m.default), {
+    name: 'update',
+    description: 'Update tt to the latest version from source',
+    args: {
+      check: {
+        type: 'boolean',
+        description: 'Only check for updates, do not install',
+      },
+      yes: {
+        type: 'boolean',
+        short: 'y',
+        description: 'Skip confirmation prompt',
+      },
+    },
+  })
+)
+
 await cli(process.argv.slice(2), mainCommand, {
   name: 'tt',
   description: 'Time tracking for developers',
-  version: '0.1.0',
+  version: VERSION,
   subCommands,
 })
