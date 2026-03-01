@@ -45,22 +45,33 @@ function findAlias(cwd: string): ResolvedProject | undefined {
   return undefined
 }
 
+const gitRootCache = new Map<string, string>()
+
 function detectGitRoot(cwd: string): ResolvedProject | undefined {
   try {
-    const result = Bun.spawnSync(['git', 'rev-parse', '--show-toplevel', '--'], {
-      cwd,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
+    const cached = gitRootCache.get(cwd)
+    let gitRoot: string
 
-    if (result.exitCode !== 0) {
-      return undefined
-    }
+    if (cached !== undefined) {
+      gitRoot = cached
+    } else {
+      const result = Bun.spawnSync(['git', 'rev-parse', '--show-toplevel', '--'], {
+        cwd,
+        stdout: 'pipe',
+        stderr: 'pipe',
+      })
 
-    // Take only the first line; the '--' separator may produce a second line
-    const gitRoot = result.stdout.toString().split('\n')[0]?.trim() ?? ''
-    if (!gitRoot) {
-      return undefined
+      if (result.exitCode !== 0) {
+        return undefined
+      }
+
+      // Take only the first line; the '--' separator may produce a second line
+      gitRoot = result.stdout.toString().split('\n')[0]?.trim() ?? ''
+      if (!gitRoot) {
+        return undefined
+      }
+
+      gitRootCache.set(cwd, gitRoot)
     }
 
     const basename = path.basename(gitRoot)
@@ -87,13 +98,6 @@ export function resolveProject(cwd: string): ResolvedProject {
   const fromGit = detectGitRoot(cwd)
   if (fromGit) {
     return fromGit
-  }
-
-  const isTTY = process.stdin.isTTY ?? false
-  if (!isTTY) {
-    throw new Error(
-      'Could not detect project. Run from a git repo or configure an alias with: tt alias add'
-    )
   }
 
   throw new Error(
