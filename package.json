@@ -7,11 +7,15 @@
     "build": "bun build --compile src/cli/index.ts --outfile dist/tt --minify",
     "dev": "bun run src/cli/index.ts",
     "db:push": "bunx drizzle-kit push",
-    "typecheck": "bunx tsc --noEmit"
+    "typecheck": "bunx tsc --noEmit",
+    "test": "vitest run --coverage && bun test tests/integration/",
+    "test:unit": "vitest run",
+    "test:integration": "bun test tests/integration/"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/luxon": "^3.7.1",
+    "@vitest/coverage-v8": "^4.0.18",
     "drizzle-kit": "^0.31.9",
     "vitest": "^4.0.18"
   },
