@@ -102,6 +102,24 @@ export const reviewSessions = sqliteTable('review_sessions', {
   uniqueIndex('idx_review_sessions_review_session').on(table.reviewId, table.sessionId),
 ])
 
+export const commandEvents = sqliteTable('command_events', {
+  id: text('id').primaryKey(),
+  command: text('command').notNull(),
+  subcommand: text('subcommand'),
+  args: text('args'),
+  durationMs: integer('duration_ms', { mode: 'number' }),
+  success: integer('success', { mode: 'boolean' }).notNull(),
+  errorMessage: text('error_message'),
+  errorType: text('error_type'),
+  projectSlug: text('project_slug'),
+  sessionId: text('session_id'),
+  cwd: text('cwd'),
+  timestamp: integer('timestamp', { mode: 'number' }).notNull(),
+}, (table) => [
+  index('idx_command_events_timestamp').on(table.timestamp),
+  index('idx_command_events_command').on(table.command),
+])
+
 export const reviewGitCommits = sqliteTable('review_git_commits', {
   id: text('id').primaryKey(),
   reviewId: text('review_id').notNull().references(() => reviews.id),

@@ -21,6 +21,7 @@ import {
   loadIdleConfig,
 } from './session-helpers'
 import type { PulseService } from './pulse-service'
+import { withTransaction } from '../../db/client'
 
 interface LifecycleServiceDeps {
   readonly repos: Repositories
@@ -54,156 +55,167 @@ export function createLifecycleService(deps: LifecycleServiceDeps) {
 
   return {
     start(cwd: string, terminalId: string, options?: SessionStartOptions): SessionStartResult {
+      // Resolve project outside transaction (may spawn git subprocess)
       const { resolved, project } = resolveAndEnsureProject(repos, cwd, options?.projectOverride)
 
-      const existingActive = repos.sessions.findActiveByProject(project.id)
-      let staleSessionClosed: { id: string; duration: number } | undefined
+      // All DB writes are atomic within a single transaction
+      return withTransaction(() => {
+        const existingActive = repos.sessions.findActiveByProject(project.id)
+        let staleSessionClosed: { id: string; duration: number } | undefined
 
-      if (existingActive) {
-        const staleResult = pulseService.closeStaleSession(existingActive)
-        if (staleResult) {
-          staleSessionClosed = staleResult
-        } else {
-          const isAttached = repos.sessions.isTerminalAttached(existingActive.id, terminalId)
-          if (isAttached) {
+        if (existingActive) {
+          const staleResult = pulseService.closeStaleSession(existingActive)
+          if (staleResult) {
+            staleSessionClosed = staleResult
+          } else {
+            const isAttached = repos.sessions.isTerminalAttached(existingActive.id, terminalId)
+            if (isAttached) {
+              return {
+                action: 'already_active' as const,
+                session: existingActive,
+                project,
+                source: resolved.source,
+              }
+            }
+
+            repos.sessions.attachTerminal(existingActive.id, terminalId)
+            repos.pulses.create({
+              id: crypto.randomUUID(),
+              sessionId: existingActive.id,
+              terminalId,
+              sourceType: 'manual',
+              timestamp: Date.now(),
+            })
+
             return {
-              action: 'already_active',
+              action: 'attached' as const,
               session: existingActive,
               project,
               source: resolved.source,
             }
           }
+        }
 
-          repos.sessions.attachTerminal(existingActive.id, terminalId)
-          repos.pulses.create({
-            id: crypto.randomUUID(),
-            sessionId: existingActive.id,
-            terminalId,
-            sourceType: 'manual',
-            timestamp: Date.now(),
-          })
-
-          return {
-            action: 'attached',
-            session: existingActive,
-            project,
-            source: resolved.source,
+        // Also check for any other stale active sessions
+        const allActive = repos.sessions.findActiveAll()
+        for (const activeSession of allActive) {
+          if (activeSession.id !== existingActive?.id) {
+            pulseService.closeStaleSession(activeSession)
           }
         }
-      }
 
-      // Also check for any other stale active sessions
-      const allActive = repos.sessions.findActiveAll()
-      for (const activeSession of allActive) {
-        if (activeSession.id !== existingActive?.id) {
-          pulseService.closeStaleSession(activeSession)
+        const now = Date.now()
+        const session = repos.sessions.create({
+          id: crypto.randomUUID(),
+          projectId: project.id,
+          startTime: now,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          source: 'manual',
+          rateAtTime: project.hourlyRate ?? null,
+          idleDeductedMs: 0,
+          isDeleted: false,
+          createdAt: now,
+          updatedAt: now,
+        })
+
+        repos.undo.push('start', {
+          sessions: [],
+          notes: [],
+          tags: [],
+          deletedSessionIds: [session.id],
+        })
+
+        repos.sessions.attachTerminal(session.id, terminalId)
+        repos.pulses.create({
+          id: crypto.randomUUID(),
+          sessionId: session.id,
+          terminalId,
+          sourceType: 'manual',
+          timestamp: now,
+        })
+
+        return {
+          action: 'created' as const,
+          session,
+          project,
+          source: resolved.source,
+          staleSessionClosed,
         }
-      }
-
-      const now = Date.now()
-      const session = repos.sessions.create({
-        id: crypto.randomUUID(),
-        projectId: project.id,
-        startTime: now,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        source: 'manual',
-        rateAtTime: project.hourlyRate ?? null,
-        idleDeductedMs: 0,
-        isDeleted: false,
-        createdAt: now,
-        updatedAt: now,
       })
-
-      repos.undo.push('start', {
-        sessions: [],
-        notes: [],
-        tags: [],
-        deletedSessionIds: [session.id],
-      })
-
-      repos.sessions.attachTerminal(session.id, terminalId)
-      repos.pulses.create({
-        id: crypto.randomUUID(),
-        sessionId: session.id,
-        terminalId,
-        sourceType: 'manual',
-        timestamp: now,
-      })
-
-      return {
-        action: 'created',
-        session,
-        project,
-        source: resolved.source,
-        staleSessionClosed,
-      }
     },
 
     stop(cwd: string, terminalId: string, options?: SessionStopOptions): SessionStopResult {
-      let project: Project | undefined
-      let activeSession: Session | undefined
+      // Resolve project outside transaction (may spawn git subprocess)
+      let resolvedProject: Project | undefined
+      let resolvedSession: Session | undefined
 
       if (options?.projectOverride) {
         const existing = repos.projects.findBySlug(options.projectOverride)
         if (existing) {
-          project = existing
-          activeSession = repos.sessions.findActiveByProject(existing.id)
+          resolvedProject = existing
+          resolvedSession = repos.sessions.findActiveByProject(existing.id)
         }
       } else {
         try {
           const resolved = resolveProject(cwd)
           const dbProject = ensureProjectInDb(resolved, repos.projects)
-          project = dbProject
-          activeSession = repos.sessions.findActiveByProject(dbProject.id)
+          resolvedProject = dbProject
+          resolvedSession = repos.sessions.findActiveByProject(dbProject.id)
         } catch {
           // Could not resolve project from cwd, fall through
         }
       }
 
-      if (!activeSession) {
-        const allActive = repos.sessions.findActiveAll()
-        if (allActive.length === 1) {
-          activeSession = allActive[0]!
-          project = repos.projects.findById(activeSession.projectId)
-        } else if (allActive.length === 0) {
-          throw new NoActiveSessionError("Try 'tt start' to begin tracking")
-        } else {
-          throw new NoActiveSessionError(
-            "Multiple active sessions found. Specify a project with: tt stop -p <project>",
-          )
+      // All DB writes are atomic within a single transaction
+      return withTransaction(() => {
+        let project = resolvedProject
+        let activeSession = resolvedSession
+
+        if (!activeSession) {
+          const allActive = repos.sessions.findActiveAll()
+          if (allActive.length === 1) {
+            activeSession = allActive[0]!
+            project = repos.projects.findById(activeSession.projectId)
+          } else if (allActive.length === 0) {
+            throw new NoActiveSessionError("Try 'tt start' to begin tracking")
+          } else {
+            throw new NoActiveSessionError(
+              "Multiple active sessions found. Specify a project with: tt stop -p <project>",
+            )
+          }
         }
-      }
 
-      if (!project) {
-        project = repos.projects.findById(activeSession!.projectId)
-      }
+        if (!project) {
+          project = repos.projects.findById(activeSession!.projectId)
+        }
 
-      if (!project) {
-        throw new NoActiveSessionError("Try 'tt start' to begin tracking")
-      }
+        if (!project) {
+          throw new NoActiveSessionError("Try 'tt start' to begin tracking")
+        }
 
-      const stopSnapshot = buildSnapshot(repos, [activeSession.id])
-      repos.undo.push('stop', stopSnapshot)
+        const stopSnapshot = buildSnapshot(repos, [activeSession.id])
+        repos.undo.push('stop', stopSnapshot)
 
-      const endTime = Date.now()
-      const stoppedSession = repos.sessions.stop(activeSession.id, endTime)
-      const durationMs = computeSessionDuration(stoppedSession)
+        const endTime = Date.now()
+        const stoppedSession = repos.sessions.stop(activeSession.id, endTime)
+        const durationMs = computeSessionDuration(stoppedSession)
 
-      // Write a stop pulse so the 60s rate limit prevents auto-restart
-      // from SessionStart hook firing immediately after manual stop
-      repos.pulses.create({
-        id: crypto.randomUUID(),
-        sessionId: activeSession.id,
-        terminalId,
-        sourceType: 'manual-stop',
-        timestamp: endTime,
+        // Write a stop pulse so the 60s rate limit prevents auto-restart
+        // from SessionStart hook firing immediately after manual stop
+        repos.pulses.create({
+          id: crypto.randomUUID(),
+          sessionId: activeSession.id,
+          terminalId,
+          sourceType: 'manual-stop',
+          timestamp: endTime,
+        })
+
+        return {
+          session: stoppedSession,
+          project,
+          durationMs,
+        }
       })
-
-      return {
-        session: stoppedSession,
-        project,
-        durationMs,
-      }
     },
 
     now(cwd: string): SessionNowResult {

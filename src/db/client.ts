@@ -21,11 +21,13 @@ function initializeDatabase(): { db: DbInstance; sqlite: Database } {
   const sqlite = new Database(DB_PATH, { create: true })
   fs.chmodSync(DB_PATH, 0o600)
 
-  sqlite.exec('PRAGMA journal_mode = WAL')
+  // busy_timeout MUST be first — all subsequent PRAGMAs need it for lock retry
   sqlite.exec('PRAGMA busy_timeout = 5000')
+  sqlite.exec('PRAGMA journal_mode = WAL')
   sqlite.exec('PRAGMA synchronous = NORMAL')
   sqlite.exec('PRAGMA foreign_keys = ON')
   sqlite.exec('PRAGMA cache_size = -32000')
+  sqlite.exec('PRAGMA journal_size_limit = 67108864') // 64MB WAL limit
 
   const db = drizzle(sqlite, { schema })
 
@@ -55,7 +57,7 @@ export function withTransaction<T>(fn: () => T): T {
   getDb() // ensure initialized
   const sqlite = getSqlite()
 
-  sqlite.exec('BEGIN IMMEDIATE')
+  sqlite.exec('BEGIN DEFERRED')
   try {
     const result = fn()
     sqlite.exec('COMMIT')
@@ -73,3 +75,6 @@ export function closeDb(): void {
     dbInstance = null
   }
 }
+
+// Ensure clean WAL checkpointing on process exit
+process.on('exit', () => closeDb())

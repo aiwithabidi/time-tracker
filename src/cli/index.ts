@@ -1,5 +1,9 @@
 import { cli, define, lazy } from 'gunshi'
 import { VERSION } from './version'
+import { logCommandEvent, parseCommandFromArgv } from '../core/event-logger'
+
+const commandStart = performance.now()
+const parsed = parseCommandFromArgv(process.argv)
 
 const mainCommand = define({
   name: 'tt',
@@ -439,9 +443,82 @@ subCommands.set(
   })
 )
 
-await cli(process.argv.slice(2), mainCommand, {
-  name: 'tt',
-  description: 'Time tracking for developers',
-  version: VERSION,
-  subCommands,
-})
+subCommands.set(
+  'logs',
+  lazy(() => import('./commands/logs').then((m) => m.default), {
+    name: 'logs',
+    description: 'View command event logs for product analytics',
+    args: {
+      limit: {
+        type: 'string',
+        short: 'l',
+        description: 'Number of events to show (default: 25)',
+      },
+      command: {
+        type: 'string',
+        short: 'c',
+        description: 'Filter by command name',
+      },
+      errors: {
+        type: 'boolean',
+        short: 'e',
+        description: 'Show only errors',
+      },
+      stats: {
+        type: 'boolean',
+        short: 's',
+        description: 'Show usage statistics summary',
+      },
+      from: {
+        type: 'string',
+        description: 'Start date (YYYY-MM-DD)',
+      },
+      to: {
+        type: 'string',
+        description: 'End date (YYYY-MM-DD)',
+      },
+      json: {
+        type: 'boolean',
+        description: 'Output raw JSON for AI analysis',
+      },
+    },
+  })
+)
+
+// Skip event logging for pulse commands (high-frequency, called by hooks)
+const skipLogging = parsed.command === 'pulse'
+
+try {
+  await cli(process.argv.slice(2), mainCommand, {
+    name: 'tt',
+    description: 'Time tracking for developers',
+    version: VERSION,
+    subCommands,
+  })
+
+  if (!skipLogging) {
+    logCommandEvent({
+      command: parsed.command,
+      subcommand: parsed.subcommand,
+      args: parsed.args,
+      durationMs: Math.round(performance.now() - commandStart),
+      success: process.exitCode === undefined || process.exitCode === 0,
+      errorMessage: undefined,
+      cwd: process.cwd(),
+    })
+  }
+} catch (error) {
+  if (!skipLogging) {
+    logCommandEvent({
+      command: parsed.command,
+      subcommand: parsed.subcommand,
+      args: parsed.args,
+      durationMs: Math.round(performance.now() - commandStart),
+      success: false,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorType: error instanceof Error ? error.constructor.name : 'Unknown',
+      cwd: process.cwd(),
+    })
+  }
+  throw error
+}

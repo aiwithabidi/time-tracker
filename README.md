@@ -107,6 +107,18 @@ tt log --from this-week     # Session history
 | `tt merge <id1> <id2>` | Merge two adjacent sessions |
 | `tt undo` | Undo the last operation |
 
+### Analytics & Diagnostics
+
+| Command | Description |
+|---------|-------------|
+| `tt logs` | Recent command events (last 25) |
+| `tt logs --stats` | Usage frequency, avg latency, error rates |
+| `tt logs --errors` | Show only failed commands |
+| `tt logs --json` | Raw JSON for AI analysis |
+| `tt logs -c start --from 2026-03-01` | Filter by command and date |
+| `tt doctor` | Health check (20 checks + auto-repair) |
+| `tt config list` | Show all configuration |
+
 > Session IDs are the first 8 characters shown in `tt log`.
 
 ## Architecture

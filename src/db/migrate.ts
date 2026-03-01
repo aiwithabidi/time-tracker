@@ -1,4 +1,13 @@
 import type { Database } from 'bun:sqlite'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+import * as os from 'node:os'
+
+// Bump this number whenever CREATE_TABLES_SQL or MIGRATIONS_SQL changes.
+// ensureSchema() will skip all DDL when the on-disk version matches.
+const SCHEMA_VERSION = 2
+
+const VERSION_FILE = path.join(os.homedir(), '.tt', 'schema-version')
 
 const CREATE_TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -114,9 +123,49 @@ const MIGRATIONS_SQL = [
 );`,
   `CREATE INDEX IF NOT EXISTS idx_review_git_commits_review ON review_git_commits(review_id);`,
   `CREATE INDEX IF NOT EXISTS idx_activity_pulses_terminal_timestamp ON activity_pulses(terminal_id, timestamp);`,
+  `CREATE TABLE IF NOT EXISTS command_events (
+  id TEXT PRIMARY KEY,
+  command TEXT NOT NULL,
+  subcommand TEXT,
+  args TEXT,
+  duration_ms INTEGER,
+  success INTEGER NOT NULL,
+  error_message TEXT,
+  error_type TEXT,
+  project_slug TEXT,
+  session_id TEXT,
+  cwd TEXT,
+  timestamp INTEGER NOT NULL
+);`,
+  `CREATE INDEX IF NOT EXISTS idx_command_events_timestamp ON command_events(timestamp);`,
+  `CREATE INDEX IF NOT EXISTS idx_command_events_command ON command_events(command);`,
 ]
 
+function readSchemaVersion(): number {
+  try {
+    const content = fs.readFileSync(VERSION_FILE, 'utf-8').trim()
+    const version = parseInt(content, 10)
+    return Number.isNaN(version) ? 0 : version
+  } catch {
+    return 0
+  }
+}
+
+function writeSchemaVersion(): void {
+  try {
+    fs.writeFileSync(VERSION_FILE, String(SCHEMA_VERSION), 'utf-8')
+  } catch {
+    // Non-critical — next run will just re-apply migrations
+  }
+}
+
 export function ensureSchema(sqlite: Database): void {
+  // Skip DDL entirely when schema is already at current version.
+  // This eliminates exclusive locks from DDL on every process start.
+  if (readSchemaVersion() >= SCHEMA_VERSION) {
+    return
+  }
+
   sqlite.exec(CREATE_TABLES_SQL)
 
   for (const migration of MIGRATIONS_SQL) {
@@ -129,4 +178,6 @@ export function ensureSchema(sqlite: Database): void {
       }
     }
   }
+
+  writeSchemaVersion()
 }

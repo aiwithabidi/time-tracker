@@ -44,18 +44,18 @@ export function createPulseService(deps: PulseServiceDeps) {
     pulse(options: PulseOptions): PulseResult {
       const { cwd, source, terminalId } = options
 
-      // Resolve project from cwd (outside transaction -- no DB writes)
-      let project: Project
+      // Resolve project name from cwd (no DB access, may spawn git subprocess)
+      let resolved: ReturnType<typeof resolveProject>
       try {
-        const resolved = resolveProject(cwd)
-        project = ensureProjectInDb(resolved, repos.projects)
+        resolved = resolveProject(cwd)
       } catch {
         // Cannot resolve project -- nothing to pulse
         return { action: 'rate-limited' }
       }
 
-      // Wrap rate-limit check + session logic in a transaction to prevent races
+      // All DB operations (including project upsert) inside the transaction
       return withTransaction(() => {
+        const project = ensureProjectInDb(resolved, repos.projects)
         // Rate limit check: if last pulse for this terminal was within threshold, skip
         const latestPulse = repos.pulses.getLatestForTerminal(terminalId)
         if (latestPulse && (Date.now() - latestPulse.timestamp) < PULSE_RATE_LIMIT_MS) {

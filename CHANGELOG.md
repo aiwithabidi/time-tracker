@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.2.1] - 2026-03-01
+
+### Added
+- `tt logs` command — view command event logs for product analytics
+  - `--stats` — usage frequency, avg latency, error rates
+  - `--errors` — show only failures
+  - `--json` — raw JSON output for AI analysis
+  - `-c <command>` — filter by command name
+  - `--from / --to` — date range filtering
+- `command_events` table — records every CLI invocation with command, args, duration, success/failure, error details, and working directory
+- Schema versioning (`~/.tt/schema-version`) — skips DDL on steady-state startup, eliminating exclusive locks from migrations
+- WAL size limit (`journal_size_limit = 64MB`) — prevents unbounded WAL growth
+- Clean process exit handler for proper WAL checkpointing
+
+### Fixed
+- **SQLite concurrency** — resolved `database is locked` errors from concurrent hook processes:
+  - `busy_timeout` PRAGMA now set before all others (was set after `journal_mode = WAL`)
+  - Switched from `BEGIN IMMEDIATE` to `BEGIN DEFERRED` (rate-limited pulses no longer grab write locks)
+  - `start()` and `stop()` writes wrapped in transactions (were bare multi-write sequences)
+  - `ensureProjectInDb()` moved inside pulse transaction (was racing outside it)
+  - Pulse command retries with jittered backoff (3 retries on lock contention)
+
+### Changed
+- Removed 30-day log rotation — all pulse error logs kept permanently for analytics
+
 ## [0.2.0] - 2026-02-28
 
 ### Added
