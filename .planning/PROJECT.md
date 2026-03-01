@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A CLI-first personal time tracking tool for freelance developers who use Claude Code. It automatically detects work sessions via Claude Code lifecycle hooks, infers which client project you're working on from the directory, and provides rich analytics — time per project, session history, activity patterns, and cost/value insights. Designed to run entirely in the terminal, with a web dashboard planned for a future milestone.
+A CLI-first personal time tracking tool for freelance developers who use Claude Code. It automatically detects work sessions via Claude Code lifecycle hooks, infers which client project you're working on from the directory, and provides reporting with billable totals and CSV export. 20 CLI commands and 8 Claude Code slash commands provide full control from the terminal or within Claude Code conversations.
 
 ## Core Value
 
@@ -12,67 +12,76 @@ Effortless, accurate time tracking that works passively in the background — th
 
 ### Validated
 
-(None yet — ship to validate)
+- Auto-detect work sessions via Claude Code hooks (SessionStart, Stop, PostToolUse) — v1.0
+- Infer project from working directory with config file override support — v1.0
+- Singleton session per project with multi-terminal attach (TT_TERMINAL_ID dedup) — v1.0
+- Hybrid tracking: auto-detect activity + manual start/stop/adjustments — v1.0
+- Idle detection with configurable thresholds (soft ~8min, hard auto-pause ~20min) — v1.0
+- Time per project reporting with date range filtering (today, week, log) — v1.0
+- Session history with start/stop times, durations, and notes — v1.0
+- Cost/value insights (hourly rate per project, billable totals via --billable) — v1.0
+- Freeform session notes and tagging — v1.0
+- 20 CLI commands: now, start, stop, edit, split, merge, note, tag, undo, week, today, log, last, projects, export, pulse, setup, away, back, review — v1.0
+- Local SQLite database with WAL mode — v1.0
+- CSV export for portability to ClickUp and other tools — v1.0
+- Session correction (edit, undo, split, merge) with atomic undo snapshots — v1.0
+- Claude Code slash commands (/tt, /tt:week, /tt:note, /tt:start, /tt:stop, /tt:projects, /tt:edit, /tt:review) — v1.0
 
 ### Active
 
-- [ ] Auto-detect work sessions via Claude Code hooks (SessionStart, Stop, lifecycle events)
-- [ ] Infer project from working directory with override support
-- [ ] Singleton session per project with multi-terminal attach (prevent double-counting)
-- [ ] Hybrid tracking: auto-detect activity + manual start/stop/adjustments
-- [ ] Idle detection with configurable thresholds (soft idle ~8min, hard auto-pause ~20min)
-- [ ] CLI dashboard for stats, session history, and project summaries
-- [ ] Time per project reporting with date range filtering
-- [ ] Session history with start/stop times, durations, and notes
-- [ ] Activity patterns (productive hours, idle gaps, focus time analysis)
-- [ ] Cost/value insights (hourly rate per project, billable totals)
+- [ ] `tt alias add` CLI command for project alias management (currently config-file only)
+- [ ] `tt rate set` CLI command for hourly rate management (currently config-file only)
+- [ ] Activity pattern analytics (productive hours, focus time, idle ratios)
 - [ ] Git context capture (branch, commit SHAs at session start/end)
-- [ ] Freeform session notes and tagging
-- [ ] Essential CLI commands: now, start, stop, status, edit, split, merge, note, undo, week, projects
-- [ ] Local database for storage and analytics
-- [ ] Project configuration via config file or CLI aliases
-- [ ] Export capability (CSV/JSON) for portability to ClickUp and other tools
+- [ ] JSON export for programmatic use
+- [ ] Direct ClickUp API push with idempotency
+- [ ] Shell completions for all commands
+- [ ] Integration/E2E test suite
 
 ### Out of Scope
 
-- Web dashboard — future milestone, not v1
-- Browser activity tracking — too invasive, not needed for MVP
-- Mobile app — CLI-first
-- Direct ClickUp API integration — v1 exports data, manual import for now
+- Web dashboard — CLI-first; rich TUI possible in future
+- Browser activity tracking — too invasive, Claude Code hooks are sufficient
+- Mobile app — CLI-first; view hours via ClickUp or spreadsheet export
 - Team features — this is a personal tool
-- Invoice generation — export data covers this need for now
+- Invoice generation — export CSV covers this need
+- Cloud sync / remote backup — breaks offline-first contract; SQLite file is trivially copyable
+- Pomodoro timer — orthogonal to billing
 
 ## Context
 
+- Shipped v1.0 with 5,411 LOC TypeScript across 114 files
+- Tech stack: Bun + bun:sqlite + drizzle-orm + gunshi + luxon + chalk + cli-table3 + zod
+- Compiled binary (dist/tt) starts in <100ms
 - Developer works in Ghostty terminal, 4-8 active client projects at any time
 - Uses Claude Code extensively with dangerous permissions, multiple tabs/terminals per project
-- Breaks are inconsistent: sometimes terminals stay open, sometimes closed
-- Currently has no time tracking — bills clients manually from memory
-- Claude Code hooks (PreToolUse, PostToolUse, SessionStart, Stop) provide lifecycle events for auto-detection
-- Each Ghostty tab/terminal needs a unique identifier (`TT_TERMINAL_ID` env var) to handle multi-terminal deduplication
-- Claude Code provides `CLAUDE_SESSION_ID` for correlating Claude-specific activity
-- Data will eventually flow to ClickUp for client billing, so schema must support export mapping
-- User prefers modern, verified-latest-version tooling — all framework/library choices must be validated against current docs, not training data
+- Data flows to ClickUp for client billing via CSV export
+- Hook scripts (SessionStart, PostToolUse, Stop) fire-and-forget; SQLite is source of truth
 
 ## Constraints
 
-- **Runtime**: Bun (user's preferred package manager and runtime)
-- **Storage**: Local database — must work offline, no external services required
-- **Performance**: Hook scripts must execute fast (<100ms) to avoid slowing Claude Code startup/shutdown
-- **Portability**: Data format must support future export to ClickUp (time entries API), CSV, and JSON
+- **Runtime**: Bun (package manager and runtime)
+- **Storage**: Local SQLite — must work offline, no external services required
+- **Performance**: Hook scripts must execute fast (<100ms) to avoid slowing Claude Code
+- **Portability**: Data format supports export to ClickUp (time entries API), CSV, and JSON
 - **Platform**: macOS (Darwin), Ghostty terminal
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| CLI-first, web later | Stay in the terminal workflow, minimize context switching | — Pending |
-| Claude Code hooks for auto-detection | Deepest integration with existing workflow, zero manual effort | — Pending |
-| Singleton session per project | Prevents double-counting across multiple terminals | — Pending |
-| Auto-pause (not auto-stop) on idle | Preserves session continuity, resumes on next activity | — Pending |
-| Soft delete only for sessions | Prevents accidental data loss, maintains audit trail | — Pending |
-| Store git context from session start | Enables "what did I work on" reporting without retrofitting | — Pending |
-| Rate snapshot per session | Hourly rates change over time; historical calculations need the rate at time of work | — Pending |
+| CLI-first, web later | Stay in the terminal workflow, minimize context switching | Good |
+| Claude Code hooks for auto-detection | Deepest integration with existing workflow, zero manual effort | Good |
+| Singleton session per project | Prevents double-counting across multiple terminals | Good |
+| Auto-pause (not auto-stop) on idle | Preserves session continuity, resumes on next activity | Good |
+| Soft delete only for sessions | Prevents accidental data loss, maintains audit trail | Good |
+| Rate snapshot per session | Hourly rates change over time; historical calculations need rate at time of work | Good |
+| Heartbeat-based lifecycle | Hooks are unreliable; SQLite pulse timestamps are source of truth | Good |
+| Stateless idle detection | No daemon/timers; computed on-demand from pulse timestamps | Good |
+| Programmatic schema creation | No migration commands needed; CREATE TABLE IF NOT EXISTS on first run | Good |
+| Repository factory functions | Plain objects, not classes; immutable returns | Good |
+| gunshi for CLI framework | Lazy loading, TypeScript-first, small bundle | Good |
+| CSV to stdout, messages to stderr | Clean shell piping (`tt export csv > report.csv`) | Good |
 
 ---
-*Last updated: 2026-02-27 after initialization*
+*Last updated: 2026-02-28 after v1.0 milestone*
