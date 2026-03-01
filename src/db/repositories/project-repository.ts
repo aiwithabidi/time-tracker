@@ -8,6 +8,14 @@ type Db = BunSQLiteDatabase<typeof schema>
 
 export function createProjectRepository(db: Db) {
   return {
+    findById(id: string): Project | undefined {
+      return db
+        .select()
+        .from(projects)
+        .where(and(eq(projects.id, id), eq(projects.isDeleted, false)))
+        .get()
+    },
+
     findBySlug(slug: string): Project | undefined {
       const results = db
         .select()

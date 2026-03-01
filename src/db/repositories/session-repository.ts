@@ -177,12 +177,16 @@ export function createSessionRepository(db: Db) {
       if (prefix.length < 6) {
         throw new Error('Session ID prefix must be at least 6 characters')
       }
+      if (!/^[0-9a-f]+$/i.test(prefix)) {
+        throw new Error('Session ID prefix must contain only hex characters')
+      }
+      const escapedPrefix = prefix.replace(/%/g, '\\%').replace(/_/g, '\\_')
       const rows = db
         .select()
         .from(sessions)
         .where(
           and(
-            sql`${sessions.id} LIKE ${prefix + '%'}`,
+            sql`${sessions.id} LIKE ${escapedPrefix + '%'} ESCAPE '\\'`,
             eq(sessions.isDeleted, false),
           ),
         )

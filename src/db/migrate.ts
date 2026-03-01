@@ -85,8 +85,11 @@ export function ensureSchema(sqlite: Database): void {
   for (const migration of MIGRATIONS_SQL) {
     try {
       sqlite.exec(migration)
-    } catch {
-      // Column may already exist on re-run — safe to ignore
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (!message.includes('already exists')) {
+        throw err
+      }
     }
   }
 }

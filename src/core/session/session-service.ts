@@ -36,6 +36,8 @@ import { parseEditTime } from '../../cli/time-parsing'
 import { withTransaction } from '../../db/client'
 import { computeIdleState, computeIdleDeduction, type IdleConfig } from './idle-detector'
 import { loadConfig } from '../../config/config-loader'
+import type { Config } from '../../config/types'
+import { DateTime } from 'luxon'
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000
 const STALE_FALLBACK_DURATION_MS = 60 * 60 * 1000
@@ -47,8 +49,7 @@ interface SessionServiceDeps {
 }
 
 function getStartOfToday(): number {
-  const now = new Date()
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  return DateTime.now().startOf('day').toMillis()
 }
 
 function computeSessionDuration(session: Session): number {
@@ -56,8 +57,7 @@ function computeSessionDuration(session: Session): number {
   return Math.max(0, end - session.startTime - session.idleDeductedMs)
 }
 
-function loadIdleConfig(): IdleConfig {
-  const config = loadConfig()
+function buildIdleConfig(config: Config): IdleConfig {
   return {
     softIdleMs: config.idle.softIdleMinutes * 60 * 1000,
     hardIdleMs: config.idle.hardIdleMinutes * 60 * 1000,
@@ -66,6 +66,8 @@ function loadIdleConfig(): IdleConfig {
 
 export function createSessionService(deps: SessionServiceDeps) {
   const { repos } = deps
+  const config = loadConfig()
+  const idleConfig = buildIdleConfig(config)
 
   function resolveAndEnsureProject(
     cwd: string,
@@ -378,12 +380,7 @@ export function createSessionService(deps: SessionServiceDeps) {
         const allActive = repos.sessions.findActiveAll()
         if (allActive.length === 1) {
           activeSession = allActive[0]!
-          project = repos.projects.findBySlug('')  // need to look up by id
-          // Look up the project by iterating
-          const foundProject = repos.projects.findAll().find(p => p.id === activeSession!.projectId)
-          if (foundProject) {
-            project = foundProject
-          }
+          project = repos.projects.findById(activeSession.projectId)
         } else if (allActive.length === 0) {
           throw new NoActiveSessionError("Try 'tt start' to begin tracking")
         } else {
@@ -394,8 +391,7 @@ export function createSessionService(deps: SessionServiceDeps) {
       }
 
       if (!project) {
-        const foundProject = repos.projects.findAll().find(p => p.id === activeSession!.projectId)
-        project = foundProject
+        project = repos.projects.findById(activeSession!.projectId)
       }
 
       if (!project) {
@@ -430,7 +426,7 @@ export function createSessionService(deps: SessionServiceDeps) {
         const allActive = repos.sessions.findActiveAll()
         if (allActive.length > 0) {
           activeSession = allActive[0]!
-          project = repos.projects.findAll().find(p => p.id === activeSession!.projectId)
+          project = repos.projects.findById(activeSession.projectId)
         }
       }
 
@@ -444,7 +440,6 @@ export function createSessionService(deps: SessionServiceDeps) {
         const latestPulse = repos.pulses.getLatestForSession(activeSession.id)
         if (latestPulse) {
           const now = Date.now()
-          const idleConfig = loadIdleConfig()
           idleState = computeIdleState(
             latestPulse.timestamp,
             now,
@@ -598,7 +593,6 @@ export function createSessionService(deps: SessionServiceDeps) {
       let reconciledSession = existingSession
 
       if (lastSessionPulse) {
-        const idleConfig = loadIdleConfig()
         const idleState = computeIdleState(
           lastSessionPulse.timestamp,
           now,
@@ -660,7 +654,7 @@ export function createSessionService(deps: SessionServiceDeps) {
         const allActive = repos.sessions.findActiveAll()
         if (allActive.length > 0) {
           activeSession = allActive[0]!
-          project = repos.projects.findAll().find(p => p.id === activeSession!.projectId)
+          project = repos.projects.findById(activeSession.projectId)
         }
       }
 
@@ -808,7 +802,7 @@ export function createSessionService(deps: SessionServiceDeps) {
         const allActive = repos.sessions.findActiveAll()
         if (allActive.length > 0) {
           activeSession = allActive[0]!
-          project = repos.projects.findAll().find(p => p.id === activeSession!.projectId)
+          project = repos.projects.findById(activeSession.projectId)
         }
       }
 
