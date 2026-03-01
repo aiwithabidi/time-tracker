@@ -40,6 +40,7 @@ import { loadConfig } from '../../config/config-loader'
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000
 const STALE_FALLBACK_DURATION_MS = 60 * 60 * 1000
 const PULSE_RATE_LIMIT_MS = 60_000
+const NOTE_MAX_LENGTH = 10_000
 const KEBAB_CASE_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 interface SessionServiceDeps {
@@ -467,6 +468,10 @@ export function createSessionService(deps: SessionServiceDeps) {
     },
 
     addNote(cwd: string, content: string): { session: Session; note: ReturnType<Repositories['notes']['create']> } {
+      if (content.length > NOTE_MAX_LENGTH) {
+        throw new Error('Note exceeds 10,000 character limit')
+      }
+
       let activeSession: Session | undefined
 
       try {
@@ -538,13 +543,7 @@ export function createSessionService(deps: SessionServiceDeps) {
     pulse(options: PulseOptions): PulseResult {
       const { cwd, source, terminalId } = options
 
-      // Rate limit check: if last pulse for this terminal was within threshold, skip
-      const latestPulse = repos.pulses.getLatestForTerminal(terminalId)
-      if (latestPulse && (Date.now() - latestPulse.timestamp) < PULSE_RATE_LIMIT_MS) {
-        return { action: 'rate-limited' }
-      }
-
-      // Resolve project from cwd
+      // Resolve project from cwd (outside transaction — no DB writes)
       let resolved: ResolvedProject
       let project: Project
       try {
@@ -555,75 +554,95 @@ export function createSessionService(deps: SessionServiceDeps) {
         return { action: 'rate-limited' }
       }
 
-      // Close stale sessions first
-      const allActive = repos.sessions.findActiveAll()
-      for (const activeSession of allActive) {
-        closeStaleSession(activeSession)
-      }
+      // Wrap rate-limit check + session logic in a transaction to prevent races
+      return withTransaction(() => {
+        // Rate limit check: if last pulse for this terminal was within threshold, skip
+        const latestPulse = repos.pulses.getLatestForTerminal(terminalId)
+        if (latestPulse && (Date.now() - latestPulse.timestamp) < PULSE_RATE_LIMIT_MS) {
+          return { action: 'rate-limited' as const }
+        }
 
-      // Find active session for this project
-      const existingSession = repos.sessions.findActiveByProject(project.id)
+        // Close stale sessions first
+        const allActive = repos.sessions.findActiveAll()
+        for (const activeSession of allActive) {
+          closeStaleSession(activeSession)
+        }
 
-      if (!existingSession) {
-        // Auto-create a new session
+        // Find active session for this project
+        const existingSession = repos.sessions.findActiveByProject(project.id)
+
+        if (!existingSession) {
+          // Auto-create a new session
+          const now = Date.now()
+          const session = repos.sessions.create({
+            id: crypto.randomUUID(),
+            projectId: project.id,
+            startTime: now,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            source,
+            rateAtTime: project.hourlyRate ?? null,
+            idleDeductedMs: 0,
+            isDeleted: false,
+            createdAt: now,
+            updatedAt: now,
+          })
+
+          repos.sessions.attachTerminal(session.id, terminalId)
+          repos.pulses.create({
+            id: crypto.randomUUID(),
+            sessionId: session.id,
+            terminalId,
+            sourceType: source,
+            timestamp: now,
+          })
+
+          return { action: 'created' as const, session, project }
+        }
+
+        // Idle reconciliation before writing pulse
         const now = Date.now()
-        const session = repos.sessions.create({
-          id: crypto.randomUUID(),
-          projectId: project.id,
-          startTime: now,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          source,
-          rateAtTime: project.hourlyRate ?? null,
-          idleDeductedMs: 0,
-          isDeleted: false,
-          createdAt: now,
-          updatedAt: now,
-        })
+        const lastSessionPulse = repos.pulses.getLatestForSession(existingSession.id)
+        let reconciledSession = existingSession
 
-        repos.sessions.attachTerminal(session.id, terminalId)
-        repos.pulses.create({
-          id: crypto.randomUUID(),
-          sessionId: session.id,
-          terminalId,
-          sourceType: source,
-          timestamp: now,
-        })
+        if (lastSessionPulse) {
+          const idleConfig = loadIdleConfig()
+          const idleState = computeIdleState(
+            lastSessionPulse.timestamp,
+            now,
+            existingSession.pausedAt,
+            idleConfig,
+          )
 
-        return { action: 'created', session, project }
-      }
-
-      // Idle reconciliation before writing pulse
-      const now = Date.now()
-      const lastSessionPulse = repos.pulses.getLatestForSession(existingSession.id)
-      let reconciledSession = existingSession
-
-      if (lastSessionPulse) {
-        const idleConfig = loadIdleConfig()
-        const idleState = computeIdleState(
-          lastSessionPulse.timestamp,
-          now,
-          existingSession.pausedAt,
-          idleConfig,
-        )
-
-        if (idleState === 'hard-idle') {
-          const deduction = computeIdleDeduction(lastSessionPulse.timestamp, now, idleConfig)
-          if (deduction > 0) {
-            reconciledSession = repos.sessions.resumeFromIdle(existingSession.id, deduction)
-          }
-        } else if (idleState === 'paused' && existingSession.pausedAt !== null) {
-          const breakDeduction = Math.max(0, now - existingSession.pausedAt)
-          if (breakDeduction > 0) {
-            reconciledSession = repos.sessions.resumeFromIdle(existingSession.id, breakDeduction)
+          if (idleState === 'hard-idle') {
+            const deduction = computeIdleDeduction(lastSessionPulse.timestamp, now, idleConfig)
+            if (deduction > 0) {
+              reconciledSession = repos.sessions.resumeFromIdle(existingSession.id, deduction)
+            }
+          } else if (idleState === 'paused' && existingSession.pausedAt !== null) {
+            const breakDeduction = Math.max(0, now - existingSession.pausedAt)
+            if (breakDeduction > 0) {
+              reconciledSession = repos.sessions.resumeFromIdle(existingSession.id, breakDeduction)
+            }
           }
         }
-      }
 
-      // Session exists — attach terminal if not already attached
-      const isAttached = repos.sessions.isTerminalAttached(reconciledSession.id, terminalId)
-      if (!isAttached) {
-        repos.sessions.attachTerminal(reconciledSession.id, terminalId)
+        // Session exists — attach terminal if not already attached
+        const isAttached = repos.sessions.isTerminalAttached(reconciledSession.id, terminalId)
+        if (!isAttached) {
+          repos.sessions.attachTerminal(reconciledSession.id, terminalId)
 
+          repos.pulses.create({
+            id: crypto.randomUUID(),
+            sessionId: reconciledSession.id,
+            terminalId,
+            sourceType: source,
+            timestamp: now,
+          })
+
+          return { action: 'attached' as const, session: reconciledSession, project }
+        }
+
+        // Already attached — just record the pulse
         repos.pulses.create({
           id: crypto.randomUUID(),
           sessionId: reconciledSession.id,
@@ -632,19 +651,8 @@ export function createSessionService(deps: SessionServiceDeps) {
           timestamp: now,
         })
 
-        return { action: 'attached', session: reconciledSession, project }
-      }
-
-      // Already attached — just record the pulse
-      repos.pulses.create({
-        id: crypto.randomUUID(),
-        sessionId: reconciledSession.id,
-        terminalId,
-        sourceType: source,
-        timestamp: now,
+        return { action: 'pulsed' as const, session: reconciledSession, project }
       })
-
-      return { action: 'pulsed', session: reconciledSession, project }
     },
 
     away(cwd: string): AwayResult {
@@ -736,6 +744,9 @@ export function createSessionService(deps: SessionServiceDeps) {
 
         // Add note
         if (options.note) {
+          if (options.note.length > NOTE_MAX_LENGTH) {
+            throw new Error('Note exceeds 10,000 character limit')
+          }
           repos.notes.create(session.id, options.note)
           changes.push(`note: added "${options.note}"`)
         }

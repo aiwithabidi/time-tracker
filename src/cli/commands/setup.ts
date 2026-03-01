@@ -5,7 +5,7 @@ import { define } from 'gunshi'
 
 const SESSION_START_SCRIPT = `#!/bin/bash
 INPUT=$(cat)
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""')
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""' | tr -cd 'a-zA-Z0-9_-')
 CWD=$(echo "$INPUT" | jq -r '.cwd // "."')
 SOURCE=$(echo "$INPUT" | jq -r '.source // "startup"')
 TERMINAL_ID="\${TT_TERMINAL_ID:-tt-$(echo "$SESSION_ID" | head -c 12)}"
@@ -22,7 +22,7 @@ exit 0
 
 const POST_TOOL_USE_SCRIPT = `#!/bin/bash
 INPUT=$(cat)
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""')
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""' | tr -cd 'a-zA-Z0-9_-')
 CWD=$(echo "$INPUT" | jq -r '.cwd // "."')
 TERMINAL_ID=$(cat ~/.tt/terminals/"$SESSION_ID" 2>/dev/null || echo "\${TT_TERMINAL_ID:-unknown-\${SESSION_ID:0:12}}")
 exec ~/.tt/bin/tt pulse \\
@@ -38,7 +38,7 @@ INPUT=$(cat)
 if [ "$(echo "$INPUT" | jq -r '.stop_hook_active')" = "true" ]; then
   exit 0
 fi
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""')
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""' | tr -cd 'a-zA-Z0-9_-')
 CWD=$(echo "$INPUT" | jq -r '.cwd // "."')
 TERMINAL_ID=$(cat ~/.tt/terminals/"$SESSION_ID" 2>/dev/null || echo "\${TT_TERMINAL_ID:-unknown-\${SESSION_ID:0:12}}")
 exec ~/.tt/bin/tt pulse \\
@@ -88,10 +88,14 @@ const setupCommand = define({
     const terminalsDir = path.join(ttDir, 'terminals')
     const binDir = path.join(ttDir, 'bin')
 
-    // Create directories
+    // Create directories with restricted permissions
     fs.mkdirSync(hooksDir, { recursive: true })
     fs.mkdirSync(terminalsDir, { recursive: true })
     fs.mkdirSync(binDir, { recursive: true })
+    fs.chmodSync(ttDir, 0o700)
+    fs.chmodSync(hooksDir, 0o700)
+    fs.chmodSync(terminalsDir, 0o700)
+    fs.chmodSync(binDir, 0o700)
 
     // Write hook scripts
     const scripts: ReadonlyArray<readonly [string, string]> = [

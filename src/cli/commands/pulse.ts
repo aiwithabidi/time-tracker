@@ -1,5 +1,10 @@
 import { define } from 'gunshi'
+import { appendFileSync } from 'node:fs'
+import * as path from 'node:path'
+import * as os from 'node:os'
 import { createSessionService, getTerminalId } from '../helpers'
+
+const PULSE_ERROR_LOG = path.join(os.homedir(), '.tt', 'pulse-errors.log')
 
 const pulseCommand = define({
   name: 'pulse',
@@ -40,8 +45,15 @@ const pulseCommand = define({
         terminalId,
         claudeSessionId: ctx.values['session-id'],
       })
-    } catch {
-      // Swallow all errors -- hooks must never fail
+    } catch (error) {
+      // Hooks must never fail, but log errors for debugging
+      try {
+        const timestamp = new Date().toISOString()
+        const message = error instanceof Error ? error.message : String(error)
+        appendFileSync(PULSE_ERROR_LOG, `[${timestamp}] ${message}\n`)
+      } catch {
+        // If logging itself fails, silently continue
+      }
     }
   },
 })
