@@ -124,7 +124,7 @@ export function ensureSchema(sqlite: Database): void {
       sqlite.exec(migration)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
-      if (!message.includes('already exists')) {
+      if (!message.includes('already exists') && !message.includes('duplicate column name')) {
         throw err
       }
     }
