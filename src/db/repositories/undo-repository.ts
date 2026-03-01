@@ -1,5 +1,6 @@
 import { eq, sql, desc } from 'drizzle-orm'
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite'
+import { z } from 'zod'
 import { undoLog } from '../schema'
 import type * as schema from '../schema'
 import type { Session, SessionNote, SessionTag } from '../types'
@@ -12,6 +13,36 @@ export interface UndoSnapshot {
   readonly tags: SessionTag[]
   readonly deletedSessionIds?: string[]
 }
+
+const undoSnapshotSchema = z.object({
+  sessions: z.array(z.object({
+    id: z.string(),
+    projectId: z.string(),
+    startTime: z.number(),
+    endTime: z.number().nullable().optional(),
+    timezone: z.string(),
+    source: z.string(),
+    rateAtTime: z.number().nullable().optional(),
+    pausedAt: z.number().nullable().optional(),
+    idleDeductedMs: z.number(),
+    isDeleted: z.boolean(),
+    createdAt: z.number(),
+    updatedAt: z.number(),
+  })),
+  notes: z.array(z.object({
+    id: z.string(),
+    sessionId: z.string(),
+    content: z.string(),
+    createdAt: z.number(),
+  })),
+  tags: z.array(z.object({
+    id: z.string(),
+    sessionId: z.string(),
+    tag: z.string(),
+    createdAt: z.number(),
+  })),
+  deletedSessionIds: z.array(z.string()).optional(),
+})
 
 export function createUndoRepository(db: Db) {
   return {
@@ -32,7 +63,9 @@ export function createUndoRepository(db: Db) {
       const row = db.select().from(undoLog).orderBy(desc(undoLog.id)).limit(1).get()
       if (!row) return undefined
       db.delete(undoLog).where(eq(undoLog.id, row.id)).run()
-      return { operation: row.operation, snapshot: JSON.parse(row.snapshot) as UndoSnapshot }
+      const parsed = JSON.parse(row.snapshot)
+      const validated = undoSnapshotSchema.parse(parsed)
+      return { operation: row.operation, snapshot: validated as UndoSnapshot }
     },
   }
 }

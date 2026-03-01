@@ -47,7 +47,7 @@ function findAlias(cwd: string): ResolvedProject | undefined {
 
 function detectGitRoot(cwd: string): ResolvedProject | undefined {
   try {
-    const result = Bun.spawnSync(['git', 'rev-parse', '--show-toplevel'], {
+    const result = Bun.spawnSync(['git', 'rev-parse', '--show-toplevel', '--'], {
       cwd,
       stdout: 'pipe',
       stderr: 'pipe',
@@ -57,7 +57,8 @@ function detectGitRoot(cwd: string): ResolvedProject | undefined {
       return undefined
     }
 
-    const gitRoot = result.stdout.toString().trim()
+    // Take only the first line; the '--' separator may produce a second line
+    const gitRoot = result.stdout.toString().split('\n')[0]?.trim() ?? ''
     if (!gitRoot) {
       return undefined
     }

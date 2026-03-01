@@ -16,8 +16,10 @@ let sqliteInstance: Database | null = null
 
 function initializeDatabase(): { db: DbInstance; sqlite: Database } {
   fs.mkdirSync(DB_DIR, { recursive: true })
+  fs.chmodSync(DB_DIR, 0o700)
 
   const sqlite = new Database(DB_PATH, { create: true })
+  fs.chmodSync(DB_PATH, 0o600)
 
   sqlite.exec('PRAGMA journal_mode = WAL')
   sqlite.exec('PRAGMA busy_timeout = 5000')

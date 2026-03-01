@@ -8,6 +8,7 @@ const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json')
 
 function ensureConfigDir(): void {
   fs.mkdirSync(CONFIG_DIR, { recursive: true })
+  fs.chmodSync(CONFIG_DIR, 0o700)
 }
 
 function defaultConfig(): Config {
@@ -44,6 +45,7 @@ export function saveConfig(config: Config): void {
   ensureConfigDir()
   const json = JSON.stringify(config, null, 2)
   fs.writeFileSync(CONFIG_PATH, json, 'utf-8')
+  fs.chmodSync(CONFIG_PATH, 0o600)
 }
 
 export function addAlias(dirPath: string, alias: ProjectAlias): Config {
