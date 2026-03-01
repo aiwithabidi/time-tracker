@@ -1,355 +1,436 @@
-# Pitfalls Research
+# Domain Pitfalls: v1.2 Web Dashboard Addition
 
-**Domain:** CLI time tracking tool with Claude Code hook integration
-**Researched:** 2026-02-27
-**Confidence:** HIGH (hook issues), HIGH (SQLite concurrency), MEDIUM (idle detection), MEDIUM (timezone handling)
+**Domain:** Adding local web dashboard to existing Bun CLI time tracker
+**Researched:** 2026-02-28
+**Overall confidence:** HIGH
+**Scope:** Pitfalls specific to adding HTTP server, WebSocket, frontend assets, and real-time updates to the existing `tt` CLI tool. Does NOT repeat v1.0/v1.1 pitfalls (hook reliability, session lifecycle, idle detection) which are already solved.
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Claude Code Stop/SessionStart Hooks Are Unreliable
+Mistakes that cause rewrites, data corruption, or broken user experience.
 
-**What goes wrong:**
-The Stop hook does not fire in multiple documented scenarios: when Claude ends its turn immediately after a tool call, when used inside Skills, when hooks stop executing after ~2.5 hours in the same session (silent degradation, no error logged), and when hooks hang on certain versions or configurations. SessionStart hooks have separate but equally problematic failures: output is never injected in new conversations, hooks fail with exit 0 but display "hook error" in the UI, and hooks are not called on the very first startup in some plugin configurations.
+### Pitfall 1: Orphaned Server Process After Terminal Close
 
-The consequence for a time tracker is catastrophic: sessions never start (false zero), sessions never close (runaway open sessions), or sessions appear closed while the user is still actively working.
+**What goes wrong:** User runs `tt dashboard`, the server starts on a port, they close the terminal or Ctrl+C fails to propagate cleanly. The server process becomes orphaned -- still running, still holding the port, still holding a database connection. Next `tt dashboard` invocation fails with EADDRINUSE. The user has no idea what process is holding the port and must resort to `lsof -i :PORT | grep LISTEN` to diagnose.
 
-**Why it happens:**
-Claude Code's hook system was designed primarily for context injection and automation side-effects, not for reliable I/O-critical event delivery. The Stop hook in particular is a best-effort notification — it is explicitly documented as not being able to block termination. The tool was also not designed with multi-terminal scenarios in mind, so edge cases compound.
+**Why it happens:** Every other `tt` command is fire-and-forget (runs in <100ms, exits). A long-running HTTP server is fundamentally different. Terminal close sends SIGHUP to the foreground process group, but if signal handlers are not registered or the process is backgrounded, it survives as an orphan. macOS does not aggressively reap user-space orphans.
 
-Known bug references:
-- Stop hooks not triggered after tool call: github.com/anthropics/claude-code/issues/3113
-- Stop hooks silently stop after ~2.5 hours: github.com/anthropics/claude-code/issues/16047
-- SessionStart hooks not working for new conversations: github.com/anthropics/claude-code/issues/10373
-- SessionStart hooks blocking CLI startup: github.com/anthropics/claude-code/issues/23359
+**Consequences:**
+- Port blocked, dashboard unusable until manual intervention
+- Multiple orphaned servers accumulate, each holding SQLite connections (exacerbates WAL checkpoint starvation)
+- Confusing error messages for a tool that prides itself on "just works"
+- Database connections from dead servers prevent WAL checkpointing
 
-**How to avoid:**
-Design the hook integration as an unreliable event source, not a reliable transaction system. The session lifecycle must be self-healing:
+**Prevention:**
+- Write a PID file to `~/.tt/dashboard.pid` on server start
+- On startup, check if PID file exists and whether that process is actually alive (`process.kill(pid, 0)`)
+- If alive and responsive: skip server start, just open browser to existing instance
+- If stale PID (process dead): remove PID file, start fresh
+- Register signal handlers for SIGTERM, SIGINT, SIGHUP that clean up PID file, close database, and call `server.stop()`
+- Add `tt dashboard stop` subcommand that reads PID file and sends SIGTERM
+- Implement auto-shutdown: if no WebSocket clients connected for 30 minutes, server exits gracefully
+- Store the port number alongside the PID in the PID file so reconnection works even with custom ports
 
-1. **Heartbeat writes over point-in-time events**: Instead of relying on Stop to close a session, write a heartbeat record every N minutes while the session is active. A session is "closed" when the last heartbeat is more than (heartbeat_interval + buffer) minutes in the past.
-2. **Session reconciliation on startup**: When SessionStart fires, check for any sessions from this terminal that have a stale heartbeat and auto-close them before opening the new session. This handles the case where Stop never fired.
-3. **Idempotent hook scripts**: Hook scripts must be safe to call multiple times, out of order, or not at all. Never write hook scripts that depend on a previous hook having completed.
-4. **Maximum session duration cap**: Enforce a hard cap (e.g., 24 hours) on any open session. Any session older than the cap is auto-closed during the next startup reconciliation.
-5. **Keep hook scripts under 100ms**: Long-running hooks risk timing out or blocking Claude Code. Do all heavy work asynchronously (fire-and-forget to a background daemon).
+**Detection:** Close terminal while dashboard is running. Run `tt dashboard` again. Also: `kill -9` the server process, then try to start again (tests stale PID recovery).
 
-**Warning signs:**
-- Sessions appearing to run for days or weeks
-- Sessions with zero duration that never got a Stop event
-- Duplicate open sessions for the same project/terminal after restart
-- Hook error messages in Claude Code UI despite the script exiting cleanly
-
-**Phase to address:**
-Phase 1 (Core session lifecycle) — must be designed for resilience from day one. Cannot be retrofitted.
+**Phase:** Phase 1 (server lifecycle). Must be correct from day one.
 
 ---
 
-### Pitfall 2: SQLite "Database Is Locked" Across Multiple Terminals
+### Pitfall 2: SQLite Write Contention Between Server and Hook Processes
 
-**What goes wrong:**
-With 4-8 simultaneous Claude Code sessions open across different terminals, multiple hook processes attempt to write to the SQLite database at the same time. Without WAL mode and proper transaction handling, writers block each other. Without a configured `busy_timeout`, any contended write fails immediately with `SQLITE_BUSY` instead of waiting. The default SQLite behavior does not schedule concurrent writers fairly — a hook process can fail silently while another terminal holds the write lock.
+**What goes wrong:** The dashboard server holds a long-lived database connection to `~/.tt/tt.db`. Meanwhile, Claude Code hook scripts fire `tt pulse` as separate OS processes that each open their own SQLite connection. The existing codebase uses `BEGIN IMMEDIATE` transactions with a 5000ms `busy_timeout`. When the server processes a dashboard quick action (start/stop session) while a hook fires simultaneously, one writer gets SQLITE_BUSY if the transaction exceeds the timeout.
 
-**Why it happens:**
-SQLite allows only one writer at a time in any journal mode. In rollback (default) mode, even readers block writers. WAL mode fixes reader/writer contention but does not fix writer/writer contention. When hook scripts spawn as short-lived processes (one per hook event, one per terminal), they have no coordination mechanism unless explicitly configured.
+The hook scripts are fire-and-forget with `2>/dev/null` and `exit 0` -- they swallow errors silently. A failed pulse means missed heartbeat data, which triggers false idle detection and incorrect session durations.
 
-The default Bun SQLite connection has no busy timeout set, meaning the first `SQLITE_BUSY` error will throw rather than retry.
+**Why it happens:** The existing architecture was designed for short-lived CLI processes that hold write locks for milliseconds. A persistent server changes the concurrency profile entirely. The server might hold a write transaction while computing response data, broadcasting WebSocket messages, or waiting on I/O -- all of which extend the transaction window.
 
-**How to avoid:**
-1. **Enable WAL mode immediately after opening the database**: `PRAGMA journal_mode = WAL`
-2. **Set a busy timeout of 5-10 seconds**: `PRAGMA busy_timeout = 5000` — this tells SQLite to retry writes automatically before throwing
-3. **Use `BEGIN IMMEDIATE` for all write transactions**: Without this, a transaction that starts as a read and later upgrades to a write will fail with SQLITE_BUSY even with a timeout set
-4. **Keep write transactions short**: Heartbeat writes and session open/close events should be single-statement or minimal two-statement transactions
-5. **Use a single writer daemon architecture**: Consider routing all writes through a single background daemon process that owns the connection, with hooks sending lightweight IPC messages (Unix socket or named pipe). This eliminates writer/writer contention entirely.
+**Consequences:**
+- Missed heartbeat pulses cause false idle detection
+- Session durations become inaccurate without any visible error
+- Dashboard shows "active" while the background tracking silently breaks
+- The more the user interacts with the dashboard (quick actions), the more hook writes fail
 
-**Warning signs:**
-- `SQLITE_BUSY` or `database is locked` errors in hook logs
-- Missing heartbeat records during high-activity periods
-- Session start/stop events disappearing from the database intermittently
+**Prevention:**
+- **Keep server write transactions under 10ms.** Commit before doing any I/O, WebSocket broadcast, or response serialization. The pattern is: BEGIN IMMEDIATE -> write -> COMMIT -> then broadcast/respond.
+- **Never hold a transaction open across an await.** All database writes must be synchronous within the transaction (which they are with bun:sqlite's synchronous API, but be careful not to introduce async operations inside `withTransaction()`).
+- **Consider server-mediated writes:** Instead of hook processes writing directly to SQLite, have them POST to the dashboard server's HTTP API (`curl -s http://localhost:PORT/api/pulse`). The server becomes the single writer, eliminating contention entirely. Fall back to direct SQLite write if server is not running.
+- **Test concurrent access:** Run a loop of `tt pulse` every 100ms while clicking dashboard quick actions. Verify no SQLITE_BUSY errors.
+- The existing `busy_timeout = 5000` is adequate for the short-lived process model but may need increase to 10000ms with a persistent server.
 
-**Phase to address:**
-Phase 1 (Data storage setup) — WAL mode and busy timeout must be configured before any concurrent usage. The daemon architecture decision should be made in Phase 1 design, not retrofitted later.
+**Detection:** Wrap the existing hook scripts to log SQLITE_BUSY errors to `~/.tt/errors.log` (instead of `/dev/null`) during development. Monitor for write failures under concurrent load.
 
----
-
-### Pitfall 3: Orphaned Open Sessions From Process Kills and Crashes
-
-**What goes wrong:**
-If Claude Code is killed with SIGKILL (kill -9, system crash, OOM killer, Force Quit), the Stop hook never runs. The session stays open in the database permanently. Over time, the user accumulates phantom sessions showing hours of active work that actually never happened. Billable totals are inflated. Analytics are corrupted.
-
-This is worse than just inaccurate data — users billing clients from this data could overcharge.
-
-**Why it happens:**
-SIGKILL cannot be caught or handled. No cleanup code runs. The Stop hook is invoked by Claude Code on clean exit only. Hard kills bypass all graceful shutdown paths.
-
-**How to avoid:**
-1. **Heartbeat-based session lifecycle (same as Pitfall 1)**: A session without a recent heartbeat is treated as stale, not active. The heartbeat timeout IS the session's implicit end time when no explicit Stop fires.
-2. **Session "last seen" timestamp** updated every heartbeat — reports should use `MIN(explicit_end, last_heartbeat + grace_period)` as the effective end time
-3. **Startup reconciliation**: On any SessionStart, close all stale sessions for this terminal before opening a new one
-4. **Max session age cap**: Any session older than 24 hours is auto-closed on next database access
-5. **`tt status` command warns about stale sessions**: Shows the user any sessions that appear to be open but have stale heartbeats, prompting manual review
-
-**Warning signs:**
-- Open sessions with `last_heartbeat` more than 30 minutes ago
-- Sessions starting and then having no further activity
-- User reports of inflated weekly totals
-
-**Phase to address:**
-Phase 1 (Core architecture) — the heartbeat mechanism must be part of the initial design, not added after launch.
+**Phase:** Phase 1 (server architecture). This is the most consequential architectural decision: whether the server is read-only or becomes the single writer.
 
 ---
 
-### Pitfall 4: Idle Detection That Is Either Useless or Annoying
+### Pitfall 3: Embedding Static Assets in Compiled Binary
 
-**What goes wrong:**
-Two failure modes: (1) idle detection is too aggressive — it pauses sessions when the developer is actively thinking, reading docs, or waiting for a build, creating constant interruptions and training the user to distrust the tool; (2) idle detection is too lenient — it never pauses, so a session that started at 9am and the computer was left overnight shows 16 hours of tracked time.
+**What goes wrong:** The project compiles to `dist/tt` via `bun build --compile src/cli/index.ts --outfile dist/tt --minify`. Dashboard assets (HTML, CSS, JS) must be served from this binary. Bun supports embedding individual files via `import x from "./file.html" with { type: "file" }`, but there is no native directory embedding (GitHub issue #5445, still open as of 2026-02). If assets are not properly embedded, the compiled binary cannot find them and the dashboard returns 404.
 
-Both modes destroy trust and accuracy. Once users distrust the data, they stop using the tool.
+**Why it happens:** Bun's `--compile` feature embeds files that are statically imported. Dynamic filesystem reads (`fs.readFileSync("./public/index.html")`) resolve against the actual filesystem, not the embedded bundle. When the compiled binary is moved away from the source tree (which is the entire point of compilation), those paths break.
 
-**Why it happens:**
-Idle detection based purely on input events (keyboard/mouse) misclassifies developer work patterns. Developers routinely have 5-20 minute stretches with no input activity while reading, thinking, or waiting for compile/test cycles. Using a threshold tuned for generic workers (3-5 minutes) aggressively flags these as idle.
+**Consequences:**
+- Dashboard works in `bun run dev` but 404s from the compiled binary
+- Binary size unpredictable if large assets are embedded without minification
+- Adding new asset files requires updating import statements (easy to forget)
 
-**How to avoid:**
-1. **Use macOS `HIDIdleTime` for system-level input detection** — this is more reliable than keyboard/mouse polling because it accounts for all input devices
-2. **Implement two-tier thresholds matching the project spec**: soft idle (~8 min) triggers a "still working?" visual indicator without pausing; hard idle (~20 min) triggers auto-pause
-3. **Never ask the user to confirm idle status in a hook script** — hooks must be non-interactive; idle prompts belong in the CLI dashboard status view only
-4. **Do not count idle time as tracked time, but do not delete it either**: Store idle gaps separately so the user can review and reclaim time that was actually productive
-5. **Provide an easy `tt undo idle` command** for false-positive idle detections
+**Prevention:**
+- **Pre-bundle frontend into minimal files.** Use Bun's bundler to produce a single `dashboard.js` and single `dashboard.css` from all frontend source. Then embed just these 2-3 files plus `index.html`.
+- **Create an `assets.ts` manifest file** that imports all embedded files in one place. This is the single source of truth for what gets embedded. New files = new import here.
+- **Alternative: inline everything.** Generate HTML with inlined CSS and JS as template literals in TypeScript. Zero separate files to embed. This is the simplest approach for a dashboard with modest frontend complexity.
+- **Add a build verification step:** After `bun build --compile`, move the binary to `/tmp/`, run it, and verify dashboard assets load. Add this to the test script.
+- **Update `package.json` build script** to include a frontend build step before compilation.
 
-The 8-minute soft threshold specifically matches developer workflow — short enough to catch genuine idle (lunch, meeting) but long enough to not interrupt deep work.
+**Detection:** Build the binary, copy it to a directory with no source files, run `./tt dashboard`, and check if assets load.
 
-**Warning signs:**
-- User frequently running `tt undo` or manually editing session end times
-- Sessions accumulating suspiciously round durations (always showing exactly 8 or 20 minutes)
-- User complaints that the tool is "too noisy"
-
-**Phase to address:**
-Phase 2 (Idle detection) — the threshold values and the two-tier architecture must be explicit design decisions, not implementation details.
-
----
-
-### Pitfall 5: Double-Counting Sessions Across Multiple Terminals
-
-**What goes wrong:**
-The user has 3 terminals open in the same project directory. Each terminal runs Claude Code. Each Claude Code instance fires its own SessionStart hook. The time tracker creates 3 independent sessions for the same project, tripling the tracked time.
-
-When the user reviews their week, they see 60 hours for a 20-hour project. This is the most damaging accuracy failure for a billing tool.
-
-**Why it happens:**
-Without explicit terminal identity and a singleton-per-project enforcement policy, each hook invocation is treated as a new session. The natural instinct is to key sessions on project directory alone, which is insufficient.
-
-**How to avoid:**
-1. **Terminal identity via `TT_TERMINAL_ID`**: Each terminal must have a unique, persistent identifier set in the shell profile. The time tracker refuses to open a session without this identifier.
-2. **Singleton session per project, not per terminal**: When a SessionStart fires for project X from terminal B, and a session for project X is already open from terminal A, terminal B "attaches" to the existing session instead of opening a new one. Only one session accumulates time.
-3. **Attach semantics, not merge semantics**: Terminal B's activity is recorded as part of the same session, but the session shows which terminals were active during which intervals (for debugging double-count issues).
-4. **Session lock record**: Write a session lock record that includes the terminal ID that "owns" the session. Other terminals check this record before creating a new session.
-5. **Heartbeats from all terminals**: Any terminal's heartbeat keeps the session alive, but only the owning terminal's Stop event closes it. If the owner crashes, ownership can be transferred via timestamp-based election on next startup.
-
-**Warning signs:**
-- Total weekly hours exceeding feasible working hours
-- Multiple open sessions with the same project ID
-- Database showing 3x sessions on days with multiple terminals
-
-**Phase to address:**
-Phase 1 (Core architecture) — terminal identity and singleton enforcement must be in the initial design. Adding this later requires a data migration.
+**Phase:** Phase 1 (build pipeline decision) and Phase 2 (frontend implementation). The approach (inline vs. file embedding) determines the entire frontend architecture.
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 6: Timezone and DST Corruption
+### Pitfall 4: No Cross-Process SQLite Change Notification
 
-**What goes wrong:**
-The developer travels or changes their system timezone. Stored timestamps are correct in UTC, but reporting queries display times in the wrong timezone because the offset at display time differs from the offset at recording time. DST transitions create 1-hour gaps or double-counted hours in daily aggregations. A session starting at 1:30am on a DST changeover night appears to end before it started.
+**What goes wrong:** The dashboard shows a live timer and session status. When the CLI or hook process updates the database (new pulse, session start/stop), the dashboard needs to reflect the change in real-time. SQLite's `sqlite3_update_hook()` only fires for changes made on the same connection in the same process. The server has no way to know when a hook process has written to the database.
 
-**How to avoid:**
-Store all timestamps as **Unix milliseconds (UTC integers)** in SQLite — never as timezone-aware strings. Store the IANA timezone name at session creation as a separate column (e.g., `America/New_York`), not the UTC offset (offsets change with DST, zone names do not). When displaying times, convert from UTC to the stored timezone using the zone name, not the current system timezone. For DST-ambiguous sessions, flag them for review rather than silently computing incorrect durations.
+**Why it happens:** SQLite is an embedded database, not a client-server database. It has no inter-process notification bus. Changes from external processes are invisible to existing connections until they query again.
 
-**Phase to address:**
-Phase 1 (Schema design) — cannot be fixed without a migration after data is collected.
+**Consequences:**
+- Dashboard shows stale data (timer stuck, session status wrong) until the next poll
+- User starts a session via CLI, dashboard does not update for seconds/minutes
+- Creates impression that the dashboard is broken or unreliable
 
----
+**Prevention:**
+- **Poll `PRAGMA data_version` every 1-2 seconds.** This PRAGMA returns an integer that increments on each commit from any process. If it changes since last check, re-query affected data and push via WebSocket. This is extremely cheap (single integer read, no table scan).
+- **Complement with hook-to-server notification:** Modify hook scripts to also `curl -s http://localhost:PORT/api/notify 2>/dev/null || true` after writing to SQLite. This gives near-instant updates when the server is running, with graceful fallback when it is not.
+- **Do NOT use filesystem watchers on the database or WAL file.** This is fragile, fires too frequently (on every page write), and is platform-dependent. `PRAGMA data_version` is the correct abstraction.
+- **Do NOT use `sqlite3_update_hook` and expect cross-process behavior.** It is explicitly same-process only per the [official SQLite documentation](https://sqlite.org/c3ref/update_hook.html).
 
-### Pitfall 7: Hook Script Performance Slowing Claude Code Startup
+**Detection:** Start a session via `tt start` in a terminal. Check whether the dashboard updates within 2 seconds. If it takes longer than the poll interval, the notification mechanism is broken.
 
-**What goes wrong:**
-Hook scripts that take more than 100ms make Claude Code feel sluggish on startup. If SessionStart hooks involve database opens, schema migrations, config file parsing, or any I/O, they compound into noticeable latency. Claude Code itself documents that SessionStart hooks should be kept fast.
-
-**How to avoid:**
-1. **Background daemon architecture**: Hook scripts are thin shims (under 50ms target) that send a fire-and-forget message to a background daemon. The daemon does all I/O.
-2. **Lazy schema migration**: Database schema migrations happen in the daemon, not in the hook script.
-3. **Pre-warmed daemon**: The daemon starts at login (via launchd plist), so it is already running when the first Claude Code session starts.
-4. **Benchmark every hook script**: Include a benchmark in the test suite that asserts hook scripts complete in under 100ms on a cold start.
-
-**Phase to address:**
-Phase 1 (Architecture) — the daemon vs. inline decision shapes the entire system.
+**Phase:** Phase 2 (real-time updates). Polling is the Phase 2 solution; hook-to-server notification is a Phase 3 optimization.
 
 ---
 
-### Pitfall 8: Project Inference Misclassification
+### Pitfall 5: WebSocket Connection Death After Sleep/Wake
 
-**What goes wrong:**
-The tool infers the project from the current working directory. When the developer is in a monorepo subdirectory (`/projects/client-a/packages/auth`), the tool either assigns time to the monorepo root (too coarse) or to the subdirectory (too fine-grained and creates dozens of phantom "projects"). When the developer runs commands from a shared utility directory or home directory, random utility work gets billed to the last detected project.
+**What goes wrong:** User opens dashboard, closes laptop lid, opens it later. The WebSocket connection is dead (TCP connection terminated during sleep) but the browser does not fire `onclose` immediately. The dashboard shows a frozen timer, stale session status, and incorrect duration for minutes until the browser detects the dead connection.
 
-**How to avoid:**
-1. **Git root detection as the primary signal**: Walk up the directory tree to find the nearest `.git` directory. That is the project root, not the CWD.
-2. **Explicit project config takes precedence**: Users should be able to define `~/.config/timetracker/projects.toml` mapping git roots to client/project names, overriding all inference.
-3. **"Unknown project" as a valid state**: When no project can be confidently inferred, create the session under an "uncategorized" bucket rather than assigning to the wrong project.
-4. **Monorepo awareness**: Allow mapping subdirectory patterns within a single git repo to different project IDs (e.g., `packages/client-a/**` → "Client A").
-5. **Always prompt the user to confirm new project detection**: The first time a new git root is seen, surface a confirmation before creating a project record.
+**Why it happens:** TCP keep-alive timers and WebSocket ping/pong have intervals measured in minutes. During sleep, the kernel does not send TCP RST packets. The browser only discovers the dead connection on the next send/receive attempt.
 
-**Phase to address:**
-Phase 1 (Project detection logic) — the inference hierarchy should be established before tracking data accumulates under wrong project names.
+**Consequences:**
+- Dashboard shows wildly incorrect time (frozen timer shows time-of-sleep, not current time)
+- User thinks tracking is active when it is stale
+- No visible indicator that data is outdated
 
----
+**Prevention:**
+- **Client-side heartbeat ping every 5 seconds.** If no pong response within 3 seconds, assume connection is dead.
+- **Reconnection with exponential backoff:** 1s, 2s, 4s, 8s, cap at 15s. On successful reconnect, request full state from server (do not rely on incremental messages).
+- **Show a visible "Reconnecting..." banner** in the UI when the connection is lost. The user must know data may be stale.
+- **Server-side cleanup for dead WebSocket clients:** If no ping received from a client for 30 seconds, close the connection and remove from the clients set to prevent memory leaks.
+- **On reconnect, re-derive all UI state from a single `/api/state` endpoint.** Never assume incremental WebSocket messages were received.
+- **Timer rendering must use local clock.** The dashboard should receive "session started at timestamp X" and compute elapsed time locally using `Date.now() - startTime`. A frozen WebSocket does not freeze the timer if rendering is clock-based rather than message-based.
 
-### Pitfall 9: Data Loss From Disk Full or I/O Errors During Write
+**Detection:** Open dashboard, disconnect WiFi for 30 seconds, reconnect. Verify the banner appears, reconnection succeeds, and all data refreshes within 5 seconds.
 
-**What goes wrong:**
-When disk space runs out during a SQLite write, the database file can be partially written and corrupted — this is a documented Timewarrior bug that destroyed entire months of data. Hook scripts that fail silently when the database write fails give the user no indication that tracking is broken.
-
-**How to avoid:**
-1. **SQLite integrity checks**: Run `PRAGMA integrity_check` periodically (e.g., on daemon startup).
-2. **Automatic backups**: Keep a rolling 7-day backup of the database file. A cron job or launchd agent copies the file daily.
-3. **Transactional writes only**: Never write partial records. All session updates must be wrapped in explicit transactions that either commit fully or roll back.
-4. **Hook error propagation**: When a hook script cannot write to the database (disk full, locked, corrupted), it must log the failure to a separate error file (not the database) and surface it in `tt status`.
-5. **Graceful degradation**: A broken database write should not crash Claude Code. The hook exits 0 but queues the event for retry.
-
-**Phase to address:**
-Phase 1 (Storage layer) and Phase 4+ (Operations/maintenance features).
+**Phase:** Phase 2 (WebSocket implementation). This must be in the initial implementation, not bolted on later.
 
 ---
 
-### Pitfall 10: Hourly Rate History Corruption
+### Pitfall 6: WebSocket Memory Leak from Unclosed Connections
 
-**What goes wrong:**
-The developer changes a project's hourly rate. Historical sessions automatically recalculate at the new rate, overstating or understating past billable amounts. Invoice that was already sent to the client no longer matches what the tool reports. This is a billing integrity failure.
+**What goes wrong:** Browser tabs are opened and never closed, or the browser crashes without sending a WebSocket close frame. The server maintains references to dead WebSocket connections in its connected clients set. Over time (days of running `tt dashboard`), memory grows as dead connections accumulate.
 
-**How to avoid:**
-Snapshot the hourly rate at session creation time in a `rate_at_time` column. Never derive historical billable amounts from the current project rate. The current rate is only used for new sessions. Changing a rate only affects sessions created after the change.
+**Why it happens:** WebSocket `close` events are not always fired (browser crash, network change, laptop sleep). The server's polling interval continues iterating over dead connections and silently failing on `ws.send()`.
 
-**Phase to address:**
-Phase 1 (Schema design) — this is a schema-level decision that cannot be fixed without a data migration.
+**Consequences:**
+- Memory growth proportional to accumulated dead connections
+- `ws.send()` errors on every polling tick for each dead connection
+- Server eventually becomes sluggish
 
----
+**Prevention:**
+- Use Bun's built-in WebSocket `close` handler to remove connections from the set
+- Implement server-side ping: if no pong within 30 seconds, remove the connection
+- Wrap `ws.send()` in try-catch and remove connections that throw
+- Cap maximum connections (realistically 1-3 for a local tool; reject if >10 as a safety valve)
+- Log connection count periodically for observability
 
-## Technical Debt Patterns
+**Detection:** Server memory usage grows steadily over hours. Error logs show repeated WebSocket send failures.
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Inline hook scripts (no daemon) | Simpler initial setup | Claude Code startup latency; harder to coordinate concurrent writes | Never — design the daemon from day one |
-| Store timestamps as timezone-aware strings | Readable in DB browser | DST corruption, sorting breaks, migration required | Never |
-| Single session per terminal (not per project) | Avoids singleton complexity | Double-counting across terminals, cannot be fixed without migration | Never |
-| Skip heartbeat mechanism, rely on Stop hook | Less complexity | Orphaned sessions from crashes/kills, inflated billing data | Never |
-| In-memory rate at query time (not stored per session) | Simpler schema | Historical billing amounts change when rate changes | Never |
-| No project config file, inference only | Simpler v1 | Misclassification accumulates, hard to correct retroactively | Acceptable as MVP IF "uncategorized" bucket exists and correction UI ships in Phase 2 |
-| Skip WAL mode in development | Works fine single-user | Fails immediately in multi-terminal use | Never — enable WAL from day one |
+**Phase:** Phase 2 (WebSocket implementation).
 
 ---
 
-## Integration Gotchas
+### Pitfall 7: Bun.serve Routes + WebSocket TypeScript Type Conflict
 
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| Claude Code hooks | Treating Stop as a reliable close event | Design heartbeat-based lifecycle; Stop is a hint, not a guarantee |
-| Claude Code hooks | Writing more than ~500ms of I/O in hook scripts | Fire-and-forget to daemon; hook script just sends a message |
-| Claude Code hooks | Depending on hook output being injected into context | Output injection is known to be broken for new conversations (issue #10373) — don't depend on it for session tracking |
-| SQLite via Bun | Opening a new connection per hook invocation without configuring WAL/timeout | Use a persistent daemon connection with WAL mode and 5s busy timeout |
-| macOS idle detection | Polling keyboard/mouse events at the application level | Use `ioreg -c IOHIDSystem` (via `HIDIdleTime`) for system-level idle detection that survives input device switching |
-| Git context capture | Running `git log` or `git diff` in hook scripts (slow on large repos) | Run only `git rev-parse HEAD` and `git branch --show-current` — fast, constant-time operations |
+**What goes wrong:** Bun.serve's TypeScript type definitions do not allow specifying both `routes` and `websocket` handlers on the same server config object. The code works at runtime but fails `tsc --noEmit` (the project's existing `typecheck` script). This is a known bug in Bun's type definitions (issues #17849, #17871, #18314).
 
----
+**Why it happens:** Bun's type definitions model `routes` and `websocket` as belonging to different overloads of the `Bun.serve()` function. TypeScript cannot satisfy both overloads simultaneously.
 
-## Performance Traps
+**Consequences:**
+- `bun run typecheck` fails, breaking the existing CI/quality gate
+- Developers scatter `@ts-ignore` comments, which masks real type errors
+- `bun build --compile` may still work (it uses Bun's own type resolution), creating a false sense of correctness
 
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| Synchronous database writes in hook scripts | Noticeable Claude Code startup lag | Async daemon with fire-and-forget IPC | From the first multi-terminal user |
-| Full table scan for analytics on large session history | `tt week` becomes slow after 6+ months of data | Index on (project_id, started_at); index on started_at | ~1,000+ sessions without indexes |
-| WAL file growing unbounded | Database reads slow down over time | Set `wal_autocheckpoint = 1000` (SQLite default is 1000 — verify it is not disabled) | After ~50,000 write operations |
-| No SQLite cache size set | Extra I/O on every query | `PRAGMA cache_size = -32000` (32MB) | Low-memory systems or large databases |
-| Computing durations at query time from open sessions | Incorrect durations when session is still open | Use `COALESCE(ended_at, last_heartbeat)` as the effective end time | Every query on active sessions |
+**Prevention:**
+- **Use the `fetch` handler pattern instead of `routes`.** The `fetch` handler has stable types that support `server.upgrade(req)` for WebSocket upgrades. Route matching can be done with a simple URL pattern check in the fetch handler -- the dashboard has very few routes (5-10 max).
+- **If using `routes`:** Create a typed wrapper function that casts the config correctly in one place, not scattered across the codebase. Document why the cast is needed with a link to the Bun issue.
+- **Pin and document the Bun version.** Bun v1.2.5+ improved WebSocket+routes support. Check if the type issue is resolved in the version you target.
+- **Run `bun run typecheck` after adding server code** to catch this immediately.
+
+**Detection:** Add server code with both routes and WebSocket, run `bun run typecheck`.
+
+**Phase:** Phase 1 (server implementation). Determines the entire server API surface pattern.
 
 ---
 
-## UX Pitfalls
+### Pitfall 8: Dashboard Quick Actions Bypassing Service Layer
 
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| Prompting user during idle detection | Interrupts flow state, trains users to distrust tool | Non-interactive idle: pause silently, show in `tt status`; let user reclaim time with `tt undo idle` |
-| Requiring manual project confirmation for every session | Friction eliminates passive tracking value | Auto-detect and assign; surface only first-time new project detection; allow bulk correction later |
-| Reporting raw seconds in CLI output | Unreadable, forces mental math | Always display as `Xh Ym`; show seconds only in export/debug mode |
-| No undo command | User errors are permanent, creates data anxiety | Implement `tt undo` as a first-class command from Phase 1; every mutation is reversible |
-| Silent hook failures | User thinks tracking is working when it is not | `tt status` must always show hook health: last successful heartbeat, whether daemon is running, any recent write errors |
-| Merging split sessions immediately without preview | User accidentally destroys session boundaries | All destructive operations (`merge`, `delete`) require confirmation or auto-create a snapshot |
+**What goes wrong:** The dashboard adds "start timer" / "stop timer" / "switch project" buttons. The HTTP handlers for these actions write directly to the database or duplicate logic, bypassing the existing service layer (`pulse-service.ts`, `edit-service.ts`, `session-service.ts`). Sessions created via dashboard lack rate snapshots, skip singleton enforcement, bypass idle detection, or miss undo snapshot creation.
+
+**Why it happens:** It is tempting to write a simple `POST /api/start` handler that does `INSERT INTO sessions`. The service layer has complex orchestration (check for existing session, snapshot rate, create undo record) that is not obvious from the outside.
+
+**Consequences:**
+- Sessions without rate snapshots break billing calculations
+- Multiple simultaneous active sessions violate the singleton constraint
+- No undo snapshots means dashboard actions are irreversible (unlike CLI actions)
+- CLI and dashboard produce different database states for the same logical operation
+- Subtle bugs that only manifest when mixing CLI and dashboard usage
+
+**Prevention:**
+- **HTTP handlers MUST call service layer functions, never repositories directly.** The server is a thin transport layer over the same services the CLI uses.
+- **Write integration tests:** "Starting a session via POST /api/start produces identical database state as `tt start`." Compare the database after each operation.
+- **Extract service layer into a shared module** that both CLI commands and HTTP handlers import. Do not copy-paste logic.
+- **The service layer is already well-factored** (session-service facade with edit-service, pulse-service underneath). The HTTP handlers should mirror the CLI command handlers in structure.
+
+**Detection:** Start a session from the dashboard, then run `tt now` in the CLI. Verify the session appears with correct rate snapshot and all metadata. Then `tt undo` to verify the undo snapshot exists.
+
+**Phase:** Phase 3 (quick actions). But the architecture decision (handlers call services) must be established in Phase 1 API design.
+
+---
+
+### Pitfall 9: Chart Library Binary Bloat
+
+**What goes wrong:** Adding a charting library (Chart.js at 63KB min+gzip, D3 at 90KB+, amCharts at 400KB+) to the embedded frontend assets bloats the compiled binary. The current `dist/tt` binary is lean because the CLI has minimal JS dependencies. A full charting library can add 200-500KB to the embedded assets.
+
+**Why it happens:** Charting libraries are designed for web apps served from CDNs with caching. In a compiled binary, every byte is embedded and loaded on every start. Tree-shaking helps but chart libraries often have tightly coupled rendering engines that resist elimination.
+
+**Consequences:**
+- Binary size increases 20-50% for charts that display simple bar/line data
+- Compilation time increases
+- Memory usage increases (embedded assets are held in memory)
+
+**Prevention:**
+- **Use Chart.js with selective registration.** Import only the chart types needed (bar, line, doughnut). Core is ~11KB, each chart type adds incrementally. Do NOT `import Chart from 'chart.js/auto'` (imports everything).
+- **Use CSS-only visualizations where possible.** The session timeline (horizontal color-coded bar) is pure HTML/CSS with `display: flex` and percentage widths. The weekly grid is a CSS grid with colored cells. These require zero JS charting library.
+- **Pre-bundle and minify** the frontend JS with Bun's bundler before embedding. This tree-shakes unused chart features and minifies the result.
+- **Set a binary size budget:** "Dashboard adds no more than 300KB to dist/tt." Check this in the build script.
+- **Consider lightweight alternatives:** [uPlot](https://github.com/leeoniya/uPlot) is ~35KB min for high-performance time-series charts. Or hand-roll SVG charts for the 3-4 chart types needed.
+
+**Detection:** Compare `ls -la dist/tt` before and after adding the dashboard. Track binary size in CI.
+
+**Phase:** Phase 2 (frontend). Choose the charting approach before building visualizations.
+
+---
+
+## Minor Pitfalls
+
+### Pitfall 10: Port Selection Conflicts
+
+**What goes wrong:** The dashboard uses a common port. Another dev tool (Vite, Next.js, etc.) already occupies it. Server crashes with EADDRINUSE.
+
+**Prevention:**
+- Use an uncommon default port (e.g., 7117). Avoid 3000-3999, 5000-5999, 8000-8999 ranges.
+- Support `--port` flag and `TT_DASHBOARD_PORT` env var for override.
+- On EADDRINUSE: check PID file. If another `tt dashboard`, reuse it (open browser). If different app, show clear error with instructions.
+- Do NOT auto-increment ports -- makes URL unpredictable and breaks bookmarks. Fail clearly.
+- Store active port in PID file (`PID:PORT`) for reconnection on non-default ports.
+
+**Phase:** Phase 1 (server startup).
+
+---
+
+### Pitfall 11: Browser Auto-Open Race Condition
+
+**What goes wrong:** `tt dashboard` starts the server and immediately opens the browser. The browser request arrives before the server is ready. User sees "connection refused."
+
+**Prevention:**
+- `Bun.serve()` is synchronous -- server is ready when the call returns. Auto-open after `Bun.serve()` should work, but verify with the compiled binary.
+- Use `Bun.spawn(["open", url])` on macOS (no npm dependency needed).
+- Print the URL to stdout: `Dashboard: http://localhost:7117` as fallback.
+- Support `--no-open` flag for headless/SSH use cases.
+
+**Phase:** Phase 1 (server startup flow).
+
+---
+
+### Pitfall 12: Server Startup Slowing Down Non-Dashboard Commands
+
+**What goes wrong:** Dashboard server code gets imported at the top level of the CLI entry point. Even when running `tt now` or `tt pulse`, the server modules are loaded, adding startup latency. The project has a hard <100ms startup constraint for hook scripts.
+
+**Prevention:**
+- **Lazy-import the dashboard module.** Only `await import("./dashboard/server")` when the `dashboard` command is invoked. gunshi already supports lazy command loading -- follow the same pattern.
+- Keep dashboard code in a separate directory (`src/dashboard/`) with no imports from the main CLI entry path.
+- Verify: `time ./dist/tt now` must remain under 100ms after adding dashboard code.
+- Frontend asset bundle should NOT be imported by the CLI entry point.
+
+**Detection:** `time ./dist/tt now` before and after adding dashboard code. If it increases >10ms, there is a lazy-loading leak.
+
+**Phase:** Phase 1 (command registration).
+
+---
+
+### Pitfall 13: Dark Theme Looking Generic
+
+**What goes wrong:** Using a CSS framework's default dark mode produces a generic admin panel that clashes with the terminal-first aesthetic.
+
+**Prevention:**
+- No CSS framework. Dashboard is small enough for hand-written CSS.
+- Terminal-inspired palette: dark background (#0d1117 or similar), muted accents, monospace font for data.
+- Dense, flat layout. No rounded cards, shadows, or gradients.
+- System font for UI text (`system-ui`), monospace for time/data values.
+- Minimal color palette: 2-3 accent colors for projects, one highlight for active elements.
+- Reference Ghostty's default theme for color inspiration.
+
+**Phase:** Phase 2 (frontend).
+
+---
+
+### Pitfall 14: Content-Type Headers for Embedded Assets
+
+**What goes wrong:** Server serves CSS as `text/plain` or JS as `application/octet-stream`. Browser refuses to apply styles or execute scripts.
+
+**Prevention:**
+- MIME type map: `.html` -> `text/html; charset=utf-8`, `.css` -> `text/css`, `.js` -> `application/javascript`, `.svg` -> `image/svg+xml`.
+- If using inline approach (HTML template strings), this is moot -- single HTML response with everything inlined.
+- CORS is NOT needed (same-origin, local). Do not add preemptively.
+- Set `Cache-Control: no-store` for all responses (local tool, no caching benefit).
+
+**Phase:** Phase 1 (static file serving).
+
+---
+
+### Pitfall 15: Client-Server Timer Drift
+
+**What goes wrong:** Client displays a timer counting up with `setInterval`. Server pushes elapsed time via WebSocket every 1-2 seconds. Due to JavaScript timer imprecision and tick alignment, client timer drifts from server value. After 30 minutes, disagreement is visible.
+
+**Prevention:**
+- Client computes elapsed time from `Date.now() - sessionStartTimestamp` (local clock), not from accumulating `setInterval` ticks.
+- Server sends the session start timestamp once; client derives elapsed locally.
+- On each WebSocket state update, client can reconcile if the server's elapsed differs by >2 seconds.
+- Never compute billable time on the client -- always use server values for financial data.
+
+**Phase:** Phase 2 (timer display).
+
+---
+
+### Pitfall 16: XSS via Session Notes in Dashboard
+
+**What goes wrong:** Session notes (entered via CLI `tt note`) contain HTML or script content. Dashboard renders notes with `innerHTML`, executing injected code.
+
+**Prevention:**
+- Use `textContent` instead of `innerHTML` for all user-provided fields.
+- Or escape HTML: create element, set `textContent`, read `innerHTML`.
+- This is a local tool (user attacking themselves), so the risk is low, but the habit matters.
+
+**Phase:** Phase 2 (frontend rendering).
+
+---
+
+### Pitfall 17: Empty State UX
+
+**What goes wrong:** Dashboard loads with no sessions today, no active timer, no projects. Empty charts, blank tables, zero values. User thinks dashboard is broken.
+
+**Prevention:**
+- Show explicit empty states: "No sessions tracked today. Start tracking with `tt start` or use the Start button."
+- Hide charts when no data (empty doughnut is confusing).
+- Show "Getting Started" guidance when zero sessions exist.
+
+**Phase:** Phase 2 (frontend).
+
+---
+
+### Pitfall 18: WebSocket Message Format Without Schema
+
+**What goes wrong:** Server sends ad-hoc JSON over WebSocket. Client assumes shapes that change during development. Runtime errors in the browser console are invisible to the developer.
+
+**Prevention:**
+- Define a TypeScript discriminated union for all message types:
+  ```typescript
+  type ServerMessage =
+    | { type: 'state'; data: DashboardState }
+    | { type: 'tick'; data: { elapsed: number } }
+    | { type: 'session-changed'; data: { sessionId: string } }
+  ```
+- Validate client-to-server messages with Zod (already in the project).
+- Keep payloads minimal -- send IDs, let client fetch full state on change.
+
+**Phase:** Phase 2 (WebSocket protocol).
+
+---
+
+## Phase-Specific Warning Summary
+
+| Phase | Pitfall | Severity | Key Mitigation |
+|-------|---------|----------|----------------|
+| Phase 1: Server foundation | Orphaned process (#1) | CRITICAL | PID file + signal handlers + auto-shutdown |
+| Phase 1: Server foundation | SQLite write contention (#2) | CRITICAL | Short transactions, consider single-writer |
+| Phase 1: Server foundation | Asset embedding decision (#3) | CRITICAL | Choose inline vs. file embedding early |
+| Phase 1: Server foundation | Routes+WebSocket types (#7) | MODERATE | Use fetch handler pattern |
+| Phase 1: Server foundation | Port conflicts (#10) | MINOR | Uncommon default + override flag |
+| Phase 1: Server foundation | Lazy loading (#12) | MINOR | Dynamic import for dashboard module |
+| Phase 1: Server foundation | Content-Type (#14) | MINOR | MIME type map |
+| Phase 2: Frontend + real-time | Cross-process notification (#4) | MODERATE | Poll PRAGMA data_version |
+| Phase 2: Frontend + real-time | WebSocket reconnection (#5) | MODERATE | Client heartbeat + backoff + banner |
+| Phase 2: Frontend + real-time | WebSocket memory leak (#6) | MODERATE | Close handler + ping timeout + try-catch |
+| Phase 2: Frontend + real-time | Chart library bloat (#9) | MODERATE | Selective imports or CSS-only charts |
+| Phase 2: Frontend + real-time | Timer drift (#15) | MINOR | Clock-based rendering, not tick-based |
+| Phase 2: Frontend + real-time | XSS via notes (#16) | MINOR | textContent, not innerHTML |
+| Phase 2: Frontend + real-time | Empty states (#17) | MINOR | Explicit guidance messages |
+| Phase 2: Frontend + real-time | Message schema (#18) | MINOR | TypeScript discriminated union |
+| Phase 3: Quick actions | Service layer bypass (#8) | MODERATE | HTTP handlers call services, never repos |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Session lifecycle**: Verify sessions close correctly when Claude Code is `kill -9`'d, not just on clean exit. Test by killing the process and checking the database.
-- [ ] **Multi-terminal deduplication**: Open 3 terminals in the same project directory simultaneously. Verify only one session is created, not three.
-- [ ] **Timezone transition**: Change system timezone mid-session. Verify the session duration is calculated correctly and reports display in the correct timezone.
-- [ ] **DST boundary**: Create a session that spans a DST transition (e.g., session starts at 1am, transitions at 2am). Verify duration is 2 hours, not 1 or 3.
-- [ ] **Disk full graceful handling**: Fill the disk to 100% while tracking. Verify no database corruption and the error is surfaced in `tt status`.
-- [ ] **Idle detection non-interactivity**: Verify idle detection never produces stdout/stderr output that would be captured by Claude Code and displayed as hook output.
-- [ ] **Hook startup latency**: Run `time` on the SessionStart hook script 10 times cold. Verify P99 is under 100ms.
-- [ ] **Rate history**: Change a project's hourly rate. Verify past sessions still show the old rate in reports, not the new one.
-- [ ] **WAL mode enabled**: Connect to the database with any SQLite browser and run `PRAGMA journal_mode`. Verify it returns `wal`.
-- [ ] **Orphan cleanup**: Manually create a session with a stale `last_heartbeat` (30 minutes ago, no end time). Start a new Claude Code session for the same project. Verify the orphan is auto-closed.
-
----
-
-## Recovery Strategies
-
-| Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| Orphaned open sessions | LOW | Run `tt reconcile` or `tt status --fix`; manually close stale sessions |
-| Timezone corruption in stored data | HIGH | Requires migration: add timezone column, re-process all records using the timezone stored at session creation (if not stored, approximate from system timezone history — lossy) |
-| Rate history overwritten (no snapshot) | HIGH | Cannot recover exact historical amounts; must reconstruct from client invoices manually |
-| SQLite database corrupted | MEDIUM | Restore from automatic daily backup (if configured); otherwise data loss from last backup |
-| Double-counted sessions (no deduplication) | MEDIUM | Identify duplicate sessions by overlapping time windows for same project; merge or delete manually via `tt merge`; add deduplication logic going forward |
-| Schema missing `rate_at_time` column | HIGH | Data migration: backfill from project's current rate (inaccurate) or from external source |
-| Hook scripts too slow (>100ms) | LOW | Refactor to daemon architecture; no data migration required |
-
----
-
-## Pitfall-to-Phase Mapping
-
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| Unreliable Stop/SessionStart hooks | Phase 1: Core architecture (heartbeat + reconciliation) | Kill Claude Code with SIGKILL; verify session is eventually closed by next startup |
-| SQLite locking under concurrent terminals | Phase 1: Storage setup (WAL + busy timeout + daemon) | Open 5 terminals simultaneously; verify no SQLITE_BUSY errors in logs |
-| Orphaned sessions from crashes | Phase 1: Core architecture (heartbeat + max age cap) | Kill -9 test; verify orphan closed on next session start |
-| Idle detection false positives | Phase 2: Idle detection (two-tier thresholds) | Sit inactive 10 minutes; verify soft idle notification; sit inactive 22 minutes; verify pause |
-| Double-counting across terminals | Phase 1: Core architecture (TT_TERMINAL_ID + singleton) | Open 3 terminals same project; verify 1 session in DB |
-| Timezone/DST corruption | Phase 1: Schema design (UTC millis + IANA zone column) | Change system TZ mid-session; verify correct duration |
-| Hook startup latency | Phase 1: Architecture (daemon design) | Benchmark SessionStart hook; verify <100ms P99 |
-| Project inference misclassification | Phase 1: Project detection (git root + config file) | Open Claude Code in monorepo subdirectory; verify correct project assigned |
-| Disk full / I/O errors | Phase 1: Storage + Phase 4: Operations | Fill disk; verify graceful error and no corruption |
-| Rate history corruption | Phase 1: Schema design (rate_at_time column) | Change rate; verify historical sessions unaffected |
+- [ ] **Orphaned process:** Close terminal while dashboard is running, then `tt dashboard` again. Must either reuse existing server or start cleanly.
+- [ ] **Kill -9 recovery:** `kill -9` the dashboard server, then `tt dashboard`. Must detect stale PID and start fresh.
+- [ ] **Concurrent writes:** Run `for i in {1..100}; do tt pulse &; done` while clicking dashboard quick actions. Zero SQLITE_BUSY errors.
+- [ ] **Compiled binary assets:** `cp dist/tt /tmp/ && /tmp/tt dashboard`. All assets load, no 404s.
+- [ ] **Sleep/wake recovery:** Open dashboard, close laptop lid 30 seconds, open. Reconnection banner appears, data refreshes within 5 seconds.
+- [ ] **Cross-process updates:** Run `tt start` in terminal while dashboard is open. Dashboard updates within 2 seconds.
+- [ ] **Lazy loading:** `time ./dist/tt now` with dashboard code present. Must remain under 100ms.
+- [ ] **Port conflict:** Start another server on dashboard port, then `tt dashboard`. Clear error message shown.
+- [ ] **Service layer parity:** Start session from dashboard, verify with `tt now`, run `tt undo`. All must work identically to CLI.
+- [ ] **Binary size:** `ls -la dist/tt` after dashboard. No more than 300KB increase.
+- [ ] **Dark theme:** Screenshot dashboard. Does it look like a terminal tool or a Bootstrap admin panel?
 
 ---
 
 ## Sources
 
-- Claude Code hooks reliability issues (Stop not firing after tool call): https://github.com/anthropics/claude-code/issues/3113
-- Claude Code Stop hooks in Skills never fire: https://github.com/anthropics/claude-code/issues/19225
-- Hooks stop executing after ~2.5 hours: https://github.com/anthropics/claude-code/issues/16047
-- SessionStart not working for new conversations: https://github.com/anthropics/claude-code/issues/10373
-- SessionStart hooks blocking CLI startup: https://github.com/anthropics/claude-code/issues/23359
-- Claude Code hooks reference documentation: https://code.claude.com/docs/en/hooks
-- SQLite concurrent writes and SQLITE_BUSY: https://tenthousandmeters.com/blog/sqlite-concurrent-writes-and-database-is-locked-errors/
-- SQLite WAL mode official documentation: https://sqlite.org/wal.html
-- Bun SQLite documentation: https://bun.com/docs/runtime/sqlite
-- SQLite performance tuning: https://phiresky.github.io/blog/2020/sqlite-performance-tuning/
-- Timewarrior database corruption on disk full: https://github.com/GothenburgBitFactory/timewarrior/issues/155
-- Timewarrior no active tracking bug: https://github.com/GothenburgBitFactory/timewarrior/issues/605
-- Best practices for database timestamps and timezones: https://www.tinybird.co/blog/database-timestamps-timezones
-- Why storing datetimes as UTC isn't enough: https://www.jamesridgway.co.uk/why-storing-datetimes-as-utc-isnt-enough/
-- macOS idle time detection (HIDIdleTime): https://xs-labs.com/en/archives/articles/iokit-idle-time/
-- Idle Detection API (browser reference, for conceptual framing): https://developer.mozilla.org/en-US/docs/Web/API/Idle_Detection_API
-- SIGTERM vs SIGKILL graceful shutdown: https://komodor.com/learn/sigterm-signal-15-exit-code-143-linux-graceful-termination/
+- [SQLite WAL Mode Documentation](https://sqlite.org/wal.html) -- concurrent access semantics, checkpoint behavior
+- [SQLite Data Change Notification Callbacks](https://sqlite.org/c3ref/update_hook.html) -- update_hook is same-process only
+- [SQLite Forum: Cross-process notification via PRAGMA data_version](https://sqlite.org/forum/info/d2586c18e7197c39c9a9ce7c6c411507c3d1e786a2c4889f996605b236fec1b7)
+- [SQLite Concurrent Writes and "database is locked"](https://tenthousandmeters.com/blog/sqlite-concurrent-writes-and-database-is-locked-errors/) -- BEGIN IMMEDIATE prevents deadlocks
+- [SQLITE_BUSY Despite Setting Timeout](https://berthub.eu/articles/posts/a-brief-post-on-sqlite3-database-locked-despite-timeout/) -- transaction upgrade pitfall
+- [Abusing SQLite to Handle Concurrency (SkyPilot)](https://blog.skypilot.co/abusing-sqlite-to-handle-concurrency/) -- busy_timeout patterns
+- [Bun Single-File Executable Documentation](https://bun.com/docs/bundler/executables) -- file embedding with `{ type: "file" }`
+- [Bun Issue #5445: Embed Directory in Executable](https://github.com/oven-sh/bun/issues/5445) -- no native directory embedding, still open
+- [Bun Issue #17871: Routes + WebSocket Type Conflict](https://github.com/oven-sh/bun/issues/17871)
+- [Bun Issue #18314: Routes + WebSocket Runtime](https://github.com/oven-sh/bun/issues/18314)
+- [Bun Issue #17849: Routes + WebSocket Type Definitions](https://github.com/oven-sh/bun/issues/17849)
+- [Bun WebSocket Documentation](https://bun.com/docs/runtime/http/websockets)
+- [Bun Issue #4175: sqlite3_update_hook Request](https://github.com/oven-sh/bun/issues/4175)
+- [Bun Discussion #14318: Real-time SQLite Events](https://github.com/oven-sh/bun/discussions/14318)
+- [Using Bun Compile to Embed Express/Vite App](https://dev.to/calumk/using-bun-compilebuild-to-embed-an-express-vite-vue-application-1e41)
+- [Chart.js](https://www.chartjs.org/) -- tree-shakeable, ~11KB core
+- [sindresorhus/open](https://github.com/sindresorhus/open) -- cross-platform browser opening
 
 ---
-*Pitfalls research for: CLI time tracking tool with Claude Code hook integration*
-*Researched: 2026-02-27*
+*Pitfalls research for: v1.2 Web Dashboard addition to tt CLI time tracker*
+*Researched: 2026-02-28*

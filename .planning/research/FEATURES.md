@@ -1,217 +1,203 @@
-# Feature Research
+# Feature Landscape: v1.2 Web Dashboard
 
-**Domain:** CLI-first time tracking tool for freelance developers
-**Researched:** 2026-02-27
-**Confidence:** HIGH (table stakes from multiple verified sources; differentiators from project-specific analysis)
+**Domain:** Local web dashboard for CLI-first time tracker (freelance developer tool)
+**Researched:** 2026-02-28
+**Confidence:** HIGH (features derived from existing data model + competitive analysis of Toggl, Clockify, WakaTime, Super Productivity)
 
-## Feature Landscape
+---
 
-### Table Stakes (Users Expect These)
+## Table Stakes
 
-Features users assume exist. Missing these = product feels incomplete.
+Features users expect from any time tracking dashboard. Missing any of these and the dashboard feels incomplete or pointless compared to the CLI.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Start/stop timer | Core loop of every time tracker; without this nothing works | LOW | `start`, `stop`, `status` commands |
-| Manual time entry with natural language times | Users always forget to start timers; "5 minutes ago", "yesterday at 3pm" are non-negotiable | LOW | Timetrap, track-time-cli, Timewarrior all support this; powered by time-parsing library |
-| Edit past entries | Mistakes happen constantly; immutable entries are unusable | MEDIUM | Edit start/end time, note, project; requires entry ID lookup |
-| Project/client grouping | Freelancers bill per client; flat list of entries is useless | LOW | Named projects with sessions attached; Watson uses project+tags, timetrap uses sheets |
-| Session notes | Context for billing disputes and memory; "what did I do on Tuesday?" | LOW | Free-form text attached to sessions at start or edit time |
-| Tags | Cross-project categorization (e.g. "design", "bugfix", "admin") | LOW | Optional; Timewarrior uses tags as primary org primitive |
-| Report: today's time | Most common daily review — "how long have I worked today?" | LOW | Running total + breakdown by project |
-| Report: time per project with date range | Primary billing artifact; weekly/monthly per-client hours | MEDIUM | Watson `report`, Timewarrior `summary` both offer this |
-| CSV/JSON export | Portability to invoicing tools, spreadsheets, ClickUp | LOW | 6 formats in timetrap; all serious tools offer this |
-| Current session status | Users need to know what's running right now | LOW | `now` or `status` command showing active timer |
-| Stop running session | Explicit stop without needing to know session ID | LOW | Trivially expected; omitting this is a crash |
-| Local data storage | Privacy; offline-first; no cloud dependency | LOW | SQLite or flat files are both standard patterns |
-| Undo last action | Time tracker state is easy to accidentally corrupt | MEDIUM | Watson has no undo; this is a pain point users cite |
-| List/history view | Browse past sessions; confirm what was logged | LOW | Timetrap `display`, Watson `log`, Timewarrior `summary` |
+| Feature | Why Expected | Complexity | CLI Dependency | Notes |
+|---------|--------------|------------|----------------|-------|
+| Live timer display | Every time tracker (Toggl, Clockify, WakaTime) shows a ticking clock for the active session; this is the first thing users look at when opening a dashboard | Low | `findActiveAll()` + `computeSessionDuration()` | Update every second via WebSocket; show project name, elapsed time, active/idle/paused state |
+| Today summary | Toggl, Clockify, WakaTime all default to "today" as landing view; mirrors `tt today` | Low | `report-service.today()` -- already built | Per-project breakdown with hours and session count; highlight currently active project |
+| Weekly summary table | Clockify's weekly report is their most-used view; Toggl shows hours per project per day; mirrors `tt week --billable` | Low | `report-service.week()` -- already built | Table with project rows, daily columns, row/column totals; include billable amounts |
+| Project list with hours | Every tool shows all projects; mirrors `tt projects` | Low | `report-service.allProjects()` -- already built | Sortable by name or hours; show hourly rate if set; click through to project detail |
+| Start/stop controls | Toggl and Clockify have a prominent start/stop button in every view; without this the dashboard is read-only -- a missed opportunity given the browser is always open | Medium | Session service `start()` / `stop()`; needs new API endpoints | Must handle edge cases: already-active session on another project, paused sessions, confirm before stopping |
+| Dark theme | Developer dashboards are expected to be dark; WakaTime is dark by default; Super Productivity offers dark mode; terminal users strongly prefer it | Low | None (CSS/design only) | Use dark gray backgrounds (not pure black per design best practices); minimum 4.5:1 contrast ratio for body text; limit palette to 6-8 project colors |
+| `tt dashboard` command | User needs a single entry point to launch the dashboard; every local dev tool (Vite, Storybook, Grafana) works this way | Low | HTTP server setup, `open` for browser launch | Start server on available port, open browser, print URL to stderr, keep process running |
+| Active/idle indicator | WakaTime and Toggl show whether you are currently active or idle; the CLI has idle detection (soft 8min, hard 20min auto-pause) but dashboard needs to surface it visually | Low | `pausedAt` field on session, pulse timestamps via `pulse-repository` | Green dot = active (pulse within 2min), yellow = soft-idle (no pulse 2-8min), red = paused/hard-idle |
 
-### Differentiators (Competitive Advantage)
+## Differentiators
 
-Features that set the product apart. Not required, but valued.
+Features that set this dashboard apart from Toggl/Clockify/WakaTime. Not expected, but valuable for a freelance developer using a CLI-first local tool.
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Auto-detect sessions via Claude Code hooks | Zero manual effort for Claude Code users — the primary workflow is fully automatic; no other CLI tracker does this | HIGH | Uses SessionStart/Stop/PreToolUse hooks; requires <100ms execution; unique to this tool |
-| Singleton session per project with multi-terminal attach | Prevents the most common double-counting bug when using multiple terminals per project | HIGH | Requires TT_TERMINAL_ID env var; all terminals attach to the same session; no other open-source CLI tracker has this |
-| Idle detection with configurable thresholds | Passive sessions stay accurate; common problem: leaving terminal open overnight inflates hours | MEDIUM | Soft idle ~8min warn, hard auto-pause ~20min; timetrackcli does macOS activity sampling; needs macOS idle API or last-activity heuristic |
-| Git context capture (branch + commit SHA at session boundaries) | Enables "what did I work on this session?" without retrofitting; invaluable for billing disputes | MEDIUM | GTM does git-native tracking; this tool captures git state as metadata, not as the primary tracking mechanism |
-| Hourly rate per project with billable totals | Direct billing insight without leaving the CLI; most CLI trackers export data and defer math to spreadsheets | MEDIUM | Rate snapshot per session (rate at time of work, not current rate); critical for multi-client freelancers |
-| Session split and merge commands | Real-world sessions get fragmented; no other CLI tracker makes this ergonomic | MEDIUM | `split` divides a running/past session at a point in time; `merge` combines adjacent sessions of same project |
-| Activity pattern analytics (productive hours, focus time) | "When am I actually productive?" — differentiates from raw time logging | HIGH | Requires session history depth; show best hours, average session length, idle ratios; timetrackcli has a 30-day calendar view as proof of concept |
-| Rich TUI dashboard with live timer | Single `tt` invocation shows all active state; far more usable than reading log output | MEDIUM | `hours` (Go) uses bubbletea for TUI; timetrackcli uses charmbracelet; this tool uses blessed/ink for Node/Bun TUI |
-| Retroactive session correction with `undo` stack | Time tracking errors compound; being able to undo the last N operations reduces fear of using the tool | MEDIUM | Most tools lack this; timetrap has no undo; Watson has no undo |
-| Project config file with aliases and rates | `~/projects/acme-corp` → client "ACME Corp" at $150/hr without per-session setup | LOW | Config-driven project inference from directory; Watson has no config-based project mapping |
+| Feature | Value Proposition | Complexity | CLI Dependency | Notes |
+|---------|-------------------|------------|----------------|-------|
+| Session timeline (horizontal bar) | Color-coded horizontal bar showing project switches throughout the day -- like a Gantt chart of your workday; Toggl gates their Timeline view behind paid plans; WakaTime shows coding durations but not project-switch patterns | Medium | `findByDateRange()` for today's sessions; each session has `startTime`, `endTime`, `projectId` | Each session renders as a colored segment proportional to duration; gaps between sessions show as gray (idle/break); this is the "at a glance" view that justifies opening the dashboard instead of running `tt today` |
+| Earnings tracker | Running billable totals per project for current week and month; Toggl and Clockify gate profitability tracking behind paid tiers ($13-20/mo); our CLI already has `--billable` flag with `rateAtTime` snapshots | Medium | `rateAtTime` on session rows, project `hourlyRate` and `currency`; need new monthly aggregate query | Show "earned this week" and "earned this month" prominently in header or sidebar; break down by project; use snapshot rate from each session (not current rate) for historical accuracy |
+| Real-time updates (WebSocket) | Timer ticks, status changes, project switches update without page refresh; local dev tools (Vite HMR, Next.js) set the expectation that local tools update live; polling feels broken by comparison | Medium | WebSocket server alongside HTTP; broadcast on session lifecycle events | Eliminates the need for manual refresh; critical for live timer to not feel laggy; also enables "leave dashboard open on second monitor" workflow |
+| Project deep dive | Click a project to see its session history, notes, tags, and total earnings; combines `tt log --project X` with notes/tags in a browseable view; no competing local tool does this well | Medium | `report-service.log()` with project filter, `note-repository`, `tag-repository` | Searchable/filterable session list; show notes inline; tag chips for filtering; earnings subtotal per session and cumulative |
+| Week-over-week comparison | "You worked 32h this week vs 38h last week (-16%)"; Toggl shows this in paid reports but for freelancers tracking utilization it is powerful for spotting overwork or underwork | Low | Two calls to week summary (current vs previous); needs minor extension to `report-service.week()` to accept date offset | Simple percentage change display; optionally show sparkline for last 4 weeks; tiny implementation effort for high perceived value |
+| Quick project switch | Click a project card to switch active tracking to that project; faster than typing `tt start --project X` in terminal | Medium | Session `stop()` + `start()` via API; needs atomic operation | Must stop current session and start new one; show confirmation modal if switching mid-session; update timeline and timer immediately via WebSocket |
+| Session notes viewer | Browse notes attached to sessions; no competing tool surfaces session-level notes well in a visual format | Low | `note-repository.findBySession()` -- already built | Show inline in project deep dive view and as tooltip/popover on timeline segments |
+| Keyboard shortcuts | Developer tool should be keyboard-navigable; matches terminal-native user expectations | Low | JavaScript key event handlers only (no backend dependency) | `s` toggle start/stop, `1-9` switch to project by index, `t` today view, `w` week view, `p` projects view, `?` help overlay |
 
-### Anti-Features (Commonly Requested, Often Problematic)
+## Anti-Features
 
-Features to explicitly NOT build.
+Features to explicitly NOT build. These would bloat the dashboard, violate the project's constraints, or duplicate what better tools already do.
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Pomodoro timer | Seen as complementary to time tracking; popular in productivity circles | Orthogonal to the core value (accurate passive billing); adds UI complexity and timer management that competes with the real timer | Use a dedicated Pomodoro app; time tracker handles billing, not focus technique |
-| Invoice generation | Freelancers need invoices; seems like natural next step from billable hours | Invoice formatting, client details, tax handling, PDF generation — each is a product in itself; scope creep that delays shipping core value | Export CSV/JSON; import into a dedicated invoicing tool or spreadsheet template |
-| Browser/app activity tracking | "Track everything I do, not just terminal sessions" | Invasive, requires system permissions, creates massive data volume, complex categorization rules — becomes an entirely different product (RescueTime/ActivityWatch territory) | Explicitly out of scope; Claude Code hooks provide sufficient signal for the target user |
-| Team/collaborative features | "What if I hire contractors?" | Multiplies auth, permissions, sync, and billing complexity; destroys the "personal tool" simplicity | Out of scope; this is a personal tool; team use case requires a different product |
-| Cloud sync / remote backup | "I want my data on multiple machines" | Introduces auth, conflict resolution, network dependency, and privacy concerns; breaks the "local first, offline works" contract | Export JSON for manual backup; local SQLite is trivially copyable |
-| Direct ClickUp / third-party API push | "Automate the whole workflow from time tracking to billing" | API rate limits, auth token management, schema drift, and error handling create a maintenance burden; also makes the tool a hard dependency on external services | Export CSV/JSON; v1 manual import is sufficient; direct integration is a v2+ milestone |
-| Real-time activity monitoring (keystroke/mouse) | Automatic idle detection seems to require it | System-level permissions on macOS, privacy concerns, background process overhead; the tool's idle detection is session-level, not keystroke-level | Use last-event timestamp heuristic + Claude Code hook activity as the idle signal; no system monitoring daemon needed |
-| Mobile app | "Check my hours from my phone" | Entirely different platform, different tech stack, sync complexity; distracts from CLI-first mission | Export and view on phone via ClickUp or spreadsheet import; CLI is the primary surface |
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| User authentication / login | Local-only tool; adding auth creates friction and violates offline-first constraint; no user data to protect from yourself | Bind server to `127.0.0.1` only; warn if attempting to expose to network |
+| Team views / multi-user | Personal tool (stated in PROJECT.md out-of-scope); team features add auth, permissions, sync complexity | Keep all views single-user; no concept of "team members" |
+| Invoice generation | Out of scope per PROJECT.md; adding it means PDF rendering (puppeteer), tax handling, client detail management -- each is a product in itself | Link to CSV export from earnings view; let invoicing tools handle formatting |
+| Pomodoro timer | Orthogonal to billing (stated in PROJECT.md out-of-scope); adds timer management UI that competes with the real billable timer | Not even as an option; users can run a separate Pomodoro tool alongside |
+| Browser activity tracking | Too invasive per PROJECT.md; requires system permissions; Claude Code hooks are the activity source | Dashboard shows data from hooks/pulses only |
+| Cloud sync / backup | Breaks offline-first contract per PROJECT.md; introduces conflict resolution, network dependency, privacy concerns | Show DB file path in a settings/about view; user can back up the SQLite file |
+| Report PDF export | Over-engineering; adds heavy dependencies (puppeteer/wkhtmltopdf); CSV export to stdout already exists in CLI | Add print-friendly CSS so browser `Cmd+P` produces clean output if needed |
+| Calendar integration (Google/Outlook) | Requires OAuth, external API keys, token refresh logic; complicates a local-only tool significantly | Session timeline serves as the visual calendar alternative |
+| Mobile-responsive design | Desktop-first developer tool; mobile optimization adds testing burden for minimal value; this runs on localhost | Acceptable if layout does not break on tablet, but do not optimize for phone breakpoints |
+| Drag-and-drop time editing | Complex interaction pattern with many edge cases; `tt edit` CLI command already handles corrections robustly | Show CLI command hints in the UI for editing sessions |
+| AI-powered insights | WakaTime does this but requires cloud inference; adds complexity and external dependencies for uncertain value | Simple computed metrics (averages, trends, week-over-week) cover 90% of the insight value |
+| Customizable widget layout | Toggl's paid feature; massive frontend state management for a personal tool with one user | Opinionated layout with the right views in the right order; no drag-and-drop dashboard builder |
+| Historical rate editing | Changing past rates retroactively creates billing confusion and audit issues | Each session already snapshots `rateAtTime`; display these as read-only; rate changes apply to new sessions only |
+| Persistent dashboard daemon | Dashboard should start on demand, not run 24/7 consuming resources | `tt dashboard` starts server; Ctrl+C stops it; no background process |
+| Notification system (browser) | Overengineered for a local tool; user has terminal open already | Active/idle indicator in the dashboard is sufficient visual feedback |
+| Custom chart date range picker | Date picker widgets add frontend complexity; predefined ranges cover real use cases | Offer "today", "this week", "last week", "this month" as buttons/tabs |
 
 ## Feature Dependencies
 
 ```
-[Claude Code Hook Integration]
-    └──requires──> [Session Storage (local DB)]
-                       └──requires──> [Project Inference (directory → client)]
-
-[Idle Detection]
-    └──requires──> [Session Storage]
-    └──enhances──> [Auto-pause on inactivity]
-
-[Multi-terminal Singleton]
-    └──requires──> [Session Storage]
-    └──requires──> [TT_TERMINAL_ID env var per terminal]
-
-[Billable Totals]
-    └──requires──> [Project Config with hourly rates]
-    └──requires──> [Session Storage]
-
-[Activity Pattern Analytics]
-    └──requires──> [Session history (minimum 2+ weeks of data)]
-    └──requires──> [Idle Detection] (to calculate actual focus time vs logged time)
-
-[Git Context Capture]
-    └──requires──> [Claude Code Hook Integration] (hooks fire at session boundaries)
-    └──enhances──> [Session notes] (auto-populated with branch/SHA)
-
-[Session Split / Merge]
-    └──requires──> [Session Storage]
-    └──requires──> [Edit past entries]
-
-[Undo Stack]
-    └──requires──> [Session Storage]
-    └──conflicts──> [hard deletes] (undo requires soft-delete / event log)
-
-[CSV/JSON Export]
-    └──requires──> [Session Storage]
-    └──requires──> [Project grouping]
-
-[TUI Dashboard]
-    └──enhances──> [Current session status]
-    └──enhances──> [Report: time per project]
-    └──requires──> [Session Storage]
+HTTP Server + API Layer (MUST BUILD FIRST)
+  |
+  +-- Today View (report-service.today())
+  |     +-- Live Timer (WebSocket + findActiveAll())
+  |     +-- Active/Idle Indicator (pausedAt + pulse timestamps)
+  |     +-- Session Timeline Bar (findByDateRange for today)
+  |
+  +-- Weekly View (report-service.week())
+  |     +-- Week-over-Week Comparison (previous week query -- extend week())
+  |     +-- Earnings Summary (rateAtTime aggregation)
+  |
+  +-- Project Deep Dive (report-service.log() + notes + tags)
+  |     +-- Session Notes Viewer (note-repository)
+  |     +-- Tag Filtering (tag-repository)
+  |     +-- Project Earnings (rateAtTime per session)
+  |
+  +-- Quick Actions (session service start/stop)
+  |     +-- Start/Stop Button (API endpoint wrapping session service)
+  |     +-- Project Switch (stop + start atomic via API)
+  |
+  +-- WebSocket Layer (real-time updates)
+        +-- Timer Tick (broadcast current duration every second)
+        +-- Status Change (session start/stop/pause events)
+        +-- Project Switch (update all views when tracking changes)
 ```
 
 ### Dependency Notes
 
-- **Claude Code Hook Integration requires Session Storage:** The daemon or DB must exist before hooks can write events; hook scripts must boot in <100ms, so they cannot initialize storage from scratch each time.
-- **Activity Pattern Analytics requires 2+ weeks of data:** This feature has no value at day 1; it should be surfaced only after sufficient history exists to avoid empty/misleading charts.
-- **Undo Stack conflicts with hard deletes:** If you hard-delete sessions, undo becomes impossible. The soft-delete design decision in PROJECT.md is a prerequisite for undo.
-- **Multi-terminal Singleton requires TT_TERMINAL_ID:** This env var must be set per terminal (in Ghostty profile or shell RC) before the feature works; needs onboarding doc or auto-setup command.
-- **Git Context Capture requires Hook Integration:** Git context is captured at session boundaries (start/stop), which are triggered by Claude Code lifecycle hooks. Without hooks, git context must be manually invoked.
+- **HTTP server + API layer is the critical path.** Every dashboard feature depends on being able to serve data and accept commands over HTTP. Build this first.
+- **WebSocket is foundational for UX, not a "nice to have."** The live timer and real-time status updates are what make the dashboard feel alive vs. a static report page. Build WebSocket support alongside the HTTP server, not as an afterthought.
+- **Existing service reuse is the key efficiency.** The `report-service` already computes today, week, log, and allProjects summaries with types like `TodaySummary`, `WeekSummary`, `DayGroup[]`, and `ProjectSummary[]`. The dashboard API should delegate directly to these functions. Do NOT rewrite query logic for the dashboard -- expose the existing services over HTTP.
+- **Project colors must be assigned before the timeline.** The session timeline needs a consistent color per project. Either add a `color` column to the projects table or derive colors deterministically from project slug hashes (simpler, no migration needed).
+- **Earnings aggregation needs one new query.** Monthly earnings require summing `(rateAtTime * duration)` grouped by project for an arbitrary date range. The existing `findByDateRange()` returns raw sessions; the aggregation can happen in the service layer using `computeSessionDuration()`.
 
-## MVP Definition
+## MVP Recommendation
 
-### Launch With (v1)
+Build in this order based on dependencies and user impact:
 
-Minimum viable product — validates that hook-based auto-detection works and produces billable hours output.
+### Phase 1: Foundation + Core Views (highest impact, lowest risk)
 
-- [ ] Claude Code hook integration (SessionStart, Stop → create/close sessions) — core differentiator; proves the concept
-- [ ] Session storage (SQLite via Bun) — everything else requires this
-- [ ] Project inference from working directory with config override — without this, all sessions are unlabeled
-- [ ] `status` / `now` command — basic feedback that the system is running
-- [ ] `start`, `stop` manual commands — fallback for non-Claude sessions
-- [ ] `week` and `projects` report commands — primary billing artifact
-- [ ] Edit past entry (time, note, project) — corrections are mandatory for real use
-- [ ] CSV export — data portability to ClickUp; required for billing workflow
-- [ ] Idle detection with auto-pause — prevents silent hour inflation overnight
-- [ ] Multi-terminal singleton (TT_TERMINAL_ID) — prevents double-counting with multiple Ghostty tabs
+Build the infrastructure and the single most valuable screen.
 
-### Add After Validation (v1.x)
+1. **`tt dashboard` command** -- entry point; starts server, opens browser
+2. **HTTP server + JSON API** -- wrap existing `report-service` methods as REST endpoints
+3. **WebSocket server** -- alongside HTTP; broadcast session events and timer ticks
+4. **Today view with live timer** -- the "killer screen"; shows active session ticking in real-time, today's per-project breakdown, active/idle indicator
+5. **Dark theme** -- first impression; set the visual tone immediately; dark gray palette with high-contrast text
 
-Features to add once core tracking is working and trusted.
+### Phase 2: Reporting + Visualization
 
-- [ ] Hourly rate per project + billable totals report — add when user has 2+ weeks of accurate data to bill from
-- [ ] Undo last operation — add when the user reports accidental overwrites; reduces friction
-- [ ] Session split/merge commands — add when session fragmentation becomes a real pain point
-- [ ] Git context capture (branch/SHA at boundaries) — add when "what did I work on" question comes up in billing
-- [ ] Session tags and freeform notes — add when project-level grouping is insufficient for reporting
-- [ ] TUI live dashboard — add when CLI output feels unwieldy for daily review
-- [ ] JSON export — add when ClickUp import needs richer data than CSV
+The views that make the dashboard worth keeping open.
 
-### Future Consideration (v2+)
+6. **Weekly summary with chart** -- second most-used view; project rows x day columns with totals; billable amounts
+7. **Session timeline bar** -- the visual differentiator; color-coded horizontal bar of today's work; gaps show breaks
+8. **Earnings tracker** -- week and month billable totals; prominent in header; per-project breakdown
 
-Features to defer until product-market fit is established.
+### Phase 3: Interactivity + Actions
 
-- [ ] Activity pattern analytics (productive hours, focus time analysis) — requires weeks of data; complex to surface usefully
-- [ ] Web dashboard — explicitly out of scope in v1; add when CLI analytics hit limits
-- [ ] Per-session rate snapshots with historical rate changes — add when rates change across clients/time periods
-- [ ] Natural language time parsing for retroactive entry (`start --at "yesterday 2pm"`) — add when manual correction workflow is established
+Transform the dashboard from read-only to actionable.
 
-## Feature Prioritization Matrix
+9. **Start/stop controls** -- make dashboard actionable; prominent button in header
+10. **Quick project switch** -- click project to switch tracking; stop current + start new atomically
+11. **Keyboard shortcuts** -- developer UX polish; `s` start/stop, `1-9` projects, `t`/`w`/`p` views
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| Claude Code hook integration | HIGH | HIGH | P1 |
-| Session storage (SQLite) | HIGH | LOW | P1 |
-| Project inference from directory | HIGH | LOW | P1 |
-| `start` / `stop` / `status` commands | HIGH | LOW | P1 |
-| Idle detection + auto-pause | HIGH | MEDIUM | P1 |
-| Multi-terminal singleton | HIGH | MEDIUM | P1 |
-| Weekly/project reports | HIGH | LOW | P1 |
-| Edit past entry | HIGH | MEDIUM | P1 |
-| CSV export | HIGH | LOW | P1 |
-| Undo last operation | MEDIUM | MEDIUM | P2 |
-| Session split/merge | MEDIUM | MEDIUM | P2 |
-| Hourly rate + billable totals | HIGH | LOW | P2 |
-| Git context capture | MEDIUM | LOW | P2 |
-| Session notes and tags | MEDIUM | LOW | P2 |
-| TUI live dashboard | MEDIUM | HIGH | P2 |
-| Activity pattern analytics | MEDIUM | HIGH | P3 |
-| JSON export | LOW | LOW | P2 |
-| Natural language time parsing | MEDIUM | MEDIUM | P3 |
+### Phase 4: Deep Dive + Polish
 
-**Priority key:**
-- P1: Must have for launch
-- P2: Should have, add when possible
-- P3: Nice to have, future consideration
+Rich exploration of individual project data.
 
-## Competitor Feature Analysis
+12. **Project deep dive view** -- session history with notes, tags, earnings per project
+13. **Session notes viewer** -- inline in project deep dive; tooltip on timeline segments
+14. **Week-over-week comparison** -- simple trend display with percentage change
 
-| Feature | Watson | Timewarrior | Timetrap | hours (Go) | This Tool |
-|---------|--------|-------------|----------|------------|-----------|
-| Start/stop timer | Yes | Yes | Yes (in/out) | Yes | Yes |
-| Project grouping | Yes (project+tags) | Yes (tags) | Yes (sheets) | Yes (tasks) | Yes (project+client config) |
-| Edit past entries | Yes (watson edit) | Yes (timew modify) | Yes (t edit --id) | Yes (TUI) | Yes |
-| Natural language times | No | Yes (timew start 10:00) | Yes (Chronic gem) | No | Yes |
-| CSV/JSON export | Yes (json) | Yes (via extensions) | Yes (6 formats) | Yes | Yes |
-| Idle detection | No | No | No | No | Yes (macOS heuristic) |
-| Multi-terminal dedup | No | No | No | No | Yes (singleton per project) |
-| Auto-detect from hooks | No | No | No | No | Yes (Claude Code hooks) |
-| Undo operation | No | No | No | No | Yes (v1.x) |
-| Session split/merge | No | Partial (fill/lengthen) | No | No | Yes (v1.x) |
-| Git context capture | No | No | No | No | Yes (v1.x) |
-| Billable rate per project | No | No | No | No | Yes (v1.x) |
-| TUI dashboard | No | No | No | Yes | Yes (v2) |
-| Activity patterns | No | No | No | Partial | Yes (v2+) |
-| Local storage only | Yes | Yes | Yes | Yes | Yes |
-| Shell completions | Yes | Yes | Yes | No | Yes |
+### Defer to Post-v1.2
+
+- **Tag-based filtering** across all views (start with per-project only in deep dive)
+- **Multi-week / monthly report views** (let `tt log` and `tt export` handle longer ranges)
+- **Activity pattern analytics** (productive hours, focus time) -- backlog item in PROJECT.md
+- **Session editing from dashboard** (complex interaction; CLI `tt edit` is sufficient)
+- **Custom date range selection** (predefined ranges cover real use cases)
+
+## Data Already Available vs. Needs Building
+
+| Data Need | Status | Source |
+|-----------|--------|--------|
+| Today's sessions by project | AVAILABLE | `report-service.today()` returns `TodaySummary` |
+| Active session with duration | AVAILABLE | `findActiveAll()` + `computeSessionDuration()` |
+| Weekly summary by project | AVAILABLE | `report-service.week()` returns `WeekSummary` |
+| Session log with day grouping | AVAILABLE | `report-service.log()` returns `DayGroup[]` |
+| All projects with weekly totals | AVAILABLE | `report-service.allProjects()` returns `ProjectSummary[]` |
+| Session notes | AVAILABLE | `note-repository.findBySession()` |
+| Session tags | AVAILABLE | `tag-repository.findBySession()` |
+| Hourly rate per session | AVAILABLE | `rateAtTime` field on session row |
+| Project hourly rate + currency | AVAILABLE | `hourlyRate` and `currency` fields on project row |
+| Idle/pause state | AVAILABLE | `pausedAt` field on session + `activityPulses` table |
+| Individual session duration | AVAILABLE | `computeSessionDuration()` handles idle deduction |
+| Start/stop session | AVAILABLE | Session service methods; need HTTP wrapper |
+| Previous week summary | NEEDS EXTENSION | Extend `report-service.week()` to accept a week offset or date range |
+| Monthly earnings aggregate | NEEDS BUILDING | New service method: `findByDateRange()` for month + aggregate `rateAtTime * durationMs` per project |
+| Project color assignment | NEEDS BUILDING | Derive deterministically from slug hash (no migration needed) |
+| WebSocket event broadcasting | NEEDS BUILDING | New infrastructure; hook into session lifecycle to broadcast events |
+| HTTP API endpoints | NEEDS BUILDING | New route handlers wrapping existing service functions |
+| Timer tick broadcasting | NEEDS BUILDING | Server-side interval broadcasting current session elapsed time every second |
+
+## Competitive Context
+
+How this dashboard compares to what users have seen elsewhere:
+
+| Feature | Toggl Track | Clockify | WakaTime | This Dashboard |
+|---------|-------------|----------|----------|----------------|
+| Live timer | Yes (web) | Yes (web) | No (async) | Yes (WebSocket) |
+| Today breakdown | Yes | Yes | Yes | Yes |
+| Weekly table | Yes | Yes (free) | Yes | Yes |
+| Session timeline | Paid only | No | Durations chart | Free (built-in) |
+| Earnings/billable | Paid ($13/mo) | Paid ($12/mo) | No | Free (built-in) |
+| Project deep dive | Yes | Yes | Yes | Yes |
+| Start/stop from web | Yes | Yes | No | Yes |
+| Dark theme | Optional | Optional | Default | Default |
+| Offline/local only | No (cloud) | No (cloud) | No (cloud) | Yes (localhost) |
+| No account needed | No | No | No | Yes |
+| Keyboard shortcuts | Limited | Limited | No | Yes |
+| Real-time (no refresh) | Yes | Partial | No | Yes (WebSocket) |
+
+**Key advantage:** This dashboard provides Toggl-paid-tier features (timeline, earnings tracking) for free, running locally with no account, no cloud dependency, and no subscription. The tradeoff is it only tracks Claude Code / terminal sessions, not browser or other app activity.
 
 ## Sources
 
-- Watson documentation: https://jazzband.github.io/Watson/ (HIGH confidence — official docs)
-- Timewarrior documentation: https://timewarrior.net/docs/what/ (HIGH confidence — official docs)
-- Timetrap README: https://github.com/samg/timetrap/blob/master/README.md (HIGH confidence — official source)
-- hours CLI: https://github.com/dhth/hours (HIGH confidence — official source)
-- timetrackcli (idle detection patterns): https://github.com/rezmoss/timetrackcli (MEDIUM confidence — reference implementation)
-- GTM (git time metric): https://github.com/git-time-metric/gtm (HIGH confidence — official source)
-- track-time-cli (retroactive entry UX): https://dev.to/f3rno64/a-powerful-nodejs-cli-time-tracker-1fb0 (MEDIUM confidence — DEV Community article)
-- Slant CLI tracker comparison 2025: https://www.slant.co/versus/19128/41473/~watson_vs_timewarrior (MEDIUM confidence — community voting)
-- Redpill-Linpro time tracking evaluation (2025): https://www.redpill-linpro.com/techblog/2025/05/22/time-tracking-software.html (MEDIUM confidence — practitioner analysis)
-- LinuxLinks 27 CLI time trackers: https://www.linuxlinks.com/timetrackers/ (MEDIUM confidence — curated list)
+- [Toggl Track Features](https://toggl.com/track/features/) -- dashboard layout, project views, billable rates, timeline view (paid) -- HIGH confidence
+- [Clockify Weekly Report](https://clockify.me/help/reports/weekly-report) -- weekly breakdown format, grouping by project -- HIGH confidence
+- [Clockify Dashboard](https://clockify.me/help/reports/dashboard) -- billable vs non-billable charts, project breakdown -- HIGH confidence
+- [WakaTime](https://wakatime.com/) -- developer-focused metrics, coding activity visualization, durations chart -- MEDIUM confidence
+- [Super Productivity](https://super-productivity.com/) -- open-source, privacy-first, offline-first developer time tracking -- MEDIUM confidence
+- [Dark Theme Design Tips](https://www.cmarix.com/blog/8-time-tested-dark-theme-design-tips-to-advance-dashboard-development/) -- contrast ratios, avoid pure black, color bin limits (6-12 max) -- MEDIUM confidence
+- [Toggl Track Review 2026](https://thedigitalprojectmanager.com/tools/toggl-track-review/) -- feature overview, pricing tiers -- MEDIUM confidence
+- [Clockify Freelance Time Tracking](https://clockify.me/freelance-time-tracking) -- freelancer-specific dashboard features -- HIGH confidence
 
 ---
-*Feature research for: CLI-first time tracking tool for freelance developers*
-*Researched: 2026-02-27*
+
+*Feature research for: v1.2 Web Dashboard milestone*
+*Researched: 2026-02-28*

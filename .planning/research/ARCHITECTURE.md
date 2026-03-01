@@ -1,434 +1,511 @@
-# Architecture Research
+# Architecture: Web Dashboard Integration
 
-**Domain:** CLI-first time tracking tool with hook-based auto-detection
-**Researched:** 2026-02-27
-**Confidence:** HIGH (component patterns verified against multiple production CLI tools; WakaTime heartbeat architecture, Timetrap session model, Timewarrior interval model)
+**Domain:** Adding local web dashboard to existing CLI time tracker
+**Researched:** 2026-02-28
+**Confidence:** HIGH (Bun.serve, WebSocket, and static embedding verified against official docs)
 
-## Standard Architecture
+## Executive Decision
 
-### System Overview
+The dashboard runs **in the same process** as the `tt dashboard` CLI command, sharing the SQLite database connection. No separate daemon, no IPC, no auth. The server uses `Bun.serve()` with the `routes` API for HTTP endpoints, WebSocket for real-time updates, and static HTML/CSS/JS assets served via `Bun.file()`.
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                         Entry Points Layer                           │
-├──────────────────────┬───────────────────────────────────────────────┤
-│  Claude Code Hooks   │           CLI Binary (tt)                     │
-│  (shell scripts)     │   start | stop | status | edit | week | ...   │
-│  PreToolUse          │                                               │
-│  PostToolUse         │                                               │
-│  SessionStart        │                                               │
-│  Stop                │                                               │
-└──────────┬───────────┴──────────────────────┬────────────────────────┘
-           │  pulse(terminalId, sessionId)     │  command + args
-           ▼                                  ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                         Command Router                               │
-│         Parses args → dispatches to command handler                  │
-│         (CAC / citty / custom minimist wrapper)                      │
-└──────────────────────────────┬───────────────────────────────────────┘
-                               │
-           ┌───────────────────┼────────────────────┐
-           ▼                   ▼                    ▼
-┌─────────────────┐  ┌──────────────────┐  ┌────────────────────┐
-│  Session        │  │  Activity Pulse  │  │  Report/Query      │
-│  Manager        │  │  Handler         │  │  Engine            │
-│                 │  │                  │  │                    │
-│  start()        │  │  recordPulse()   │  │  week()            │
-│  stop()         │  │  detectIdle()    │  │  projects()        │
-│  status()       │  │  autoPause()     │  │  history()         │
-│  attach()       │  │  autoResume()    │  │  summary()         │
-│  edit()         │  │                  │  │                    │
-└────────┬────────┘  └────────┬─────────┘  └──────────┬─────────┘
-         │                    │                        │
-         └──────────────┬─────┘                        │
-                        ▼                              ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                         Service Layer                                │
-│                                                                      │
-│   ProjectResolver    IdleDetector    GitCapture    ExportService     │
-│   (dir → project)   (soft/hard)     (branch/SHA)  (CSV/JSON)        │
-└──────────────────────────────────────┬───────────────────────────────┘
-                                       │
-┌──────────────────────────────────────▼───────────────────────────────┐
-│                         Repository Layer                             │
-│                                                                      │
-│   SessionRepository   PulseRepository   ProjectRepository           │
-│   (CRUD sessions)     (heartbeat log)   (config + rates)            │
-└──────────────────────────────────────┬───────────────────────────────┘
-                                       │
-┌──────────────────────────────────────▼───────────────────────────────┐
-│                         Storage Layer                                │
-│                                                                      │
-│       ~/.config/timetracker/timetracker.db  (SQLite, WAL mode)      │
-│       ~/.config/timetracker/config.json     (project aliases)       │
-└──────────────────────────────────────────────────────────────────────┘
-```
-
-### Component Responsibilities
-
-| Component | Responsibility | Communicates With |
-|-----------|----------------|-------------------|
-| Hook Scripts | Shell-level entry points; fire `tt pulse` on Claude Code lifecycle events | CLI Binary only (subprocess exec) |
-| CLI Binary (tt) | Parse subcommands, validate args, format output to stdout | Command Router |
-| Command Router | Map `tt <subcommand>` to handler, validate flag schemas (Zod) | Session Manager, Pulse Handler, Report Engine |
-| Session Manager | Create/stop/attach/edit sessions; enforce singleton-per-project | Repository Layer, ProjectResolver, GitCapture |
-| Activity Pulse Handler | Receive heartbeats, update last-seen timestamp, trigger idle checks | Session Manager, IdleDetector, Repository |
-| Idle Detector | Compare last-seen timestamps to soft/hard thresholds; emit auto-pause/resume events | Session Manager |
-| Report/Query Engine | Aggregate session data, format tables/summaries for terminal display | Repository Layer |
-| ProjectResolver | Map working directory (or override) to canonical project name | ProjectRepository, config.json |
-| GitCapture | Read current branch and HEAD SHA at session boundaries | Shell (git subprocess) |
-| ExportService | Serialize sessions to CSV or JSON for external tools (ClickUp) | SessionRepository |
-| SessionRepository | CRUD for sessions table; handles soft-delete | SQLite via Drizzle ORM |
-| PulseRepository | Insert and query activity_pulses table | SQLite via Drizzle ORM |
-| ProjectRepository | CRUD for projects table, rate history | SQLite via Drizzle ORM |
-
-## Recommended Project Structure
+## System Architecture
 
 ```
-src/
-├── cli/                     # Entry point layer
-│   ├── index.ts             # Binary entry point, bootstraps router
-│   └── commands/            # One file per subcommand (start, stop, status, ...)
-│       ├── start.ts
-│       ├── stop.ts
-│       ├── status.ts
-│       ├── edit.ts
-│       ├── pulse.ts          # Called by hooks (not user-facing)
-│       ├── week.ts
-│       ├── projects.ts
-│       └── ...
-├── core/                    # Domain/business logic — no I/O, fully testable
-│   ├── session/
-│   │   ├── SessionManager.ts
-│   │   ├── IdleDetector.ts
-│   │   └── types.ts
-│   ├── pulse/
-│   │   ├── PulseHandler.ts
-│   │   └── types.ts
-│   └── reports/
-│       ├── ReportEngine.ts
-│       └── formatters.ts
-├── services/                # Orchestration — cross-cutting concerns
-│   ├── ProjectResolver.ts
-│   ├── GitCapture.ts
-│   └── ExportService.ts
-├── db/                      # Data layer
-│   ├── schema.ts            # Drizzle schema definitions
-│   ├── migrations/          # Drizzle migration files
-│   ├── repositories/
-│   │   ├── SessionRepository.ts
-│   │   ├── PulseRepository.ts
-│   │   └── ProjectRepository.ts
-│   └── client.ts            # Singleton DB connection
-├── hooks/                   # Claude Code shell scripts (not TypeScript)
-│   ├── session-start.sh
-│   ├── session-stop.sh
-│   ├── pre-tool-use.sh
-│   └── post-tool-use.sh
-└── config/
-    ├── ConfigLoader.ts      # Reads ~/.config/timetracker/config.json
-    └── types.ts
+┌────────────────────────────────────────────────────────────────────┐
+│                    Compiled Binary: dist/tt                        │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  ┌──────────────┐   ┌──────────────────────────────────────────┐  │
+│  │  CLI Commands │   │  tt dashboard (new command)              │  │
+│  │  (gunshi)     │   │                                          │  │
+│  │              │   │  ┌────────────────────────────────────┐  │  │
+│  │  start       │   │  │         Bun.serve()                │  │  │
+│  │  stop        │   │  │                                    │  │  │
+│  │  now         │   │  │  routes: {                         │  │  │
+│  │  today       │   │  │    "/":        index.html          │  │  │
+│  │  week        │   │  │    "/api/...": API handlers        │  │  │
+│  │  ...         │   │  │  }                                 │  │  │
+│  │              │   │  │                                    │  │  │
+│  └──────┬───────┘   │  │  fetch: WebSocket upgrade handler  │  │  │
+│         │           │  │                                    │  │  │
+│         │           │  │  websocket: {                      │  │  │
+│         │           │  │    open, message, close             │  │  │
+│         │           │  │  }                                 │  │  │
+│         │           │  └──────────────┬─────────────────────┘  │  │
+│         │           │                 │                         │  │
+│         │           └─────────────────┼─────────────────────────┘  │
+│         │                             │                            │
+│         ▼                             ▼                            │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │                    Service Layer (shared)                    │  │
+│  │                                                             │  │
+│  │  createSessionService({ repos })                            │  │
+│  │  createReportService({ repos })                             │  │
+│  │  createReviewService({ repos })                             │  │
+│  │  createDashboardService({ repos })  <-- NEW (timeline,     │  │
+│  │                                         earnings queries)   │  │
+│  └──────────────────────┬──────────────────────────────────────┘  │
+│                         │                                         │
+│  ┌──────────────────────▼──────────────────────────────────────┐  │
+│  │                  Repository Layer (shared)                   │  │
+│  │  createRepositories(db) -> projects, sessions, pulses, ...  │  │
+│  └──────────────────────┬──────────────────────────────────────┘  │
+│                         │                                         │
+│  ┌──────────────────────▼──────────────────────────────────────┐  │
+│  │                     SQLite (bun:sqlite)                      │  │
+│  │              ~/.tt/tt.db  WAL mode, shared connection        │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-### Structure Rationale
+## Key Architectural Decisions
 
-- **cli/commands/**: One file per subcommand keeps command surface small (<200 lines each); new commands are additive, not destructive
-- **core/**: Zero I/O code — pure functions over domain types; makes unit testing fast and isolated
-- **services/**: Orchestrates cross-cutting operations (resolver + git + export); sits between CLI and repositories
-- **db/repositories/**: Repository pattern isolates SQL from business logic; each repository is independently swappable or mockable
-- **hooks/**: Shell scripts rather than TypeScript because they must execute under 100ms; they exec the compiled `tt` binary and exit immediately
+### 1. Same-Process Server (not a daemon)
 
-## Architectural Patterns
+**Decision:** The `tt dashboard` command starts Bun.serve() in the current process and keeps it alive until Ctrl+C.
 
-### Pattern 1: Heartbeat / Activity Pulse
+**Why:**
+- SQLite with WAL mode supports concurrent readers but only one writer. Same-process avoids write contention entirely.
+- The existing `getDb()` singleton returns a cached connection. The server reuses it directly -- zero overhead.
+- No daemon management (pidfiles, startup scripts, launchd). The developer runs `tt dashboard`, it opens a browser tab, and Ctrl+C stops it.
+- The CLI commands (from other terminals) write to the same database file. WAL mode means the server can read while CLI writes. No coordination needed.
 
-**What:** Every Claude Code hook fires `tt pulse --terminal-id $TT_TERMINAL_ID --session-id $CLAUDE_SESSION_ID`. The pulse is written to a `pulses` table with a timestamp. A background timer (or on-demand check) compares the latest pulse timestamp to the current time to determine idle state.
+**Implication:** While the dashboard is running, the process blocks. This is fine -- it is a foreground command like `tt dashboard`, not a background service.
 
-**When to use:** When activity signals come from an external event source (hooks) rather than from polling. This is the WakaTime model adapted for CLI.
+**Concurrency model:**
+```
+Terminal 1: tt dashboard     (server process, reads DB)
+Terminal 2: tt pulse ...     (hook fire, writes DB)
+Terminal 3: tt start acme    (CLI command, writes DB)
+Terminal 4: tt stop          (CLI command, writes DB)
 
-**Trade-offs:**
-- Pro: hooks do minimal work (<10ms); no daemon required; survives terminal kills
-- Pro: idle detection is derived from data, not from a running timer — no state to lose
-- Con: idle detection is reactive, not proactive — pausing only happens when the next command runs, or when a polling interval fires
+All write to the same ~/.tt/tt.db via WAL mode.
+Dashboard server reads on 1-second poll interval.
+SQLite WAL handles reader/writer concurrency natively.
+```
 
-**Example:**
+### 2. Bun.serve() with Routes + WebSocket + Fetch Fallback
+
+**Decision:** Use `Bun.serve()` with the `routes` object for static assets and API endpoints, `websocket` handlers for real-time updates, and a `fetch` fallback for WebSocket upgrade.
+
+**Pattern:**
 ```typescript
-// PulseHandler.ts — called by `tt pulse` subcommand
-export async function recordPulse(
-  terminalId: string,
-  sessionId: string,
-  projectId: string,
-  repo: PulseRepository,
-  sessionManager: SessionManager
-): Promise<void> {
-  await repo.insert({ terminalId, sessionId, projectId, timestamp: Date.now() })
-  await sessionManager.ensureActive(projectId)
+const server = Bun.serve({
+  port: 7117,
+
+  // Static assets and API routes
+  routes: {
+    "/": Bun.file("./src/dashboard/public/index.html"),
+    "/style.css": Bun.file("./src/dashboard/public/style.css"),
+    "/app.js": Bun.file("./src/dashboard/public/app.js"),
+    "/charts.js": Bun.file("./src/dashboard/public/charts.js"),
+    "/api/status": handleStatus,       // GET current status + timer
+    "/api/today": handleToday,         // GET today summary
+    "/api/week": handleWeek,           // GET week summary
+    "/api/sessions": handleSessions,   // GET session log
+    "/api/projects": handleProjects,   // GET all projects
+    "/api/earnings": handleEarnings,   // GET earnings data
+    "/api/timeline": handleTimeline,   // GET day timeline
+    "/api/actions/start": handleStart, // POST start session
+    "/api/actions/stop": handleStop,   // POST stop session
+  },
+
+  // Fallback: WebSocket upgrade
+  fetch(req, server) {
+    const url = new URL(req.url)
+    if (url.pathname === "/ws") {
+      if (server.upgrade(req)) return
+      return new Response("WebSocket upgrade failed", { status: 400 })
+    }
+    return new Response("Not found", { status: 404 })
+  },
+
+  // @ts-ignore -- Bun types don't yet allow routes + websocket together
+  websocket: {
+    open(ws) { clients.add(ws) },
+    close(ws) { clients.delete(ws) },
+    message(ws, msg) { /* handle incoming commands */ },
+  },
+})
+```
+
+**Note:** As of Bun 1.2+, the TypeScript types incorrectly disallow `routes` and `websocket` together ([oven-sh/bun#17871](https://github.com/oven-sh/bun/issues/17871), [#18314](https://github.com/oven-sh/bun/issues/18314)). The runtime supports it fine. Use `// @ts-ignore` on the websocket property until types are fixed.
+
+### 3. Static File Serving
+
+**Decision:** Serve frontend assets from the filesystem using `Bun.file()` in the routes map. For the compiled binary, embed files using `with { type: "file" }` imports.
+
+**Development mode (bun run src/cli/index.ts):**
+```typescript
+routes: {
+  "/": Bun.file("./src/dashboard/public/index.html"),
+  "/style.css": Bun.file("./src/dashboard/public/style.css"),
+  // ...
 }
 ```
 
-### Pattern 2: Singleton Session via Database Lock (Stateless Daemon)
-
-**What:** No persistent daemon process. Instead, the database itself enforces the singleton-per-project invariant. Before creating a new session, the Session Manager queries for an open session (`end_time IS NULL`) for the project. If one exists, the new terminal "attaches" to it by writing its `terminal_id` into a `session_terminals` join table rather than creating a duplicate session.
-
-**When to use:** Multi-terminal environments where preventing double-counting is critical. Avoids process management complexity of a daemon.
-
-**Trade-offs:**
-- Pro: no daemon to crash, restart, or manage PID files
-- Pro: SQLite's WAL mode handles concurrent readers safely (multiple terminals reading status)
-- Con: writes still serialize through SQLite locking — acceptable since write frequency is low (session events, not heartbeats per keystroke)
-- Con: idle detection cannot fire unless something triggers a command invocation (mitigated by optional periodic pulse via cron/launchd)
-
-**Example:**
+**Compiled binary (bun build --compile):**
 ```typescript
-// SessionManager.ts — attach instead of duplicate
-export async function ensureActive(
-  projectId: string,
-  terminalId: string,
-  repo: SessionRepository
-): Promise<Session> {
-  const active = await repo.findActiveByProject(projectId)
-  if (active) {
-    await repo.attachTerminal(active.id, terminalId)
-    return active
+import indexHtml from "./public/index.html" with { type: "file" }
+import styleCss from "./public/style.css" with { type: "file" }
+
+routes: {
+  "/": new Response(Bun.file(indexHtml), { headers: { "Content-Type": "text/html" } }),
+  "/style.css": new Response(Bun.file(styleCss), { headers: { "Content-Type": "text/css" } }),
+}
+```
+
+The `with { type: "file" }` import attribute embeds the file in the compiled binary and returns a path string (e.g. `$bunfs/index-a1b2c3.html`). `Bun.file()` can read from this embedded path.
+
+**Alternative approach -- HTML import:** Bun also supports `import index from "./index.html"` which creates a manifest object that `Bun.serve()` serves automatically with all bundled assets. This is cleaner if it works reliably with `--compile`. Test during implementation; fall back to explicit file imports if needed.
+
+**Risk:** MEDIUM. Bun's HTML import + `--compile` interaction needs validation. The `with { type: "file" }` approach is the safer fallback.
+
+### 4. Frontend: Vanilla JS with Chart.js
+
+**Decision:** Plain JavaScript with template literals for rendering, Chart.js for charts, and CSS custom properties for theming. No framework, no build step for frontend code.
+
+**Why:**
+- The dashboard has 4-5 views with server-driven data. No complex client-side state.
+- Modern browser APIs (fetch, WebSocket, template literals, CSS custom properties) cover all needs.
+- Chart.js (tree-shaken to bar + doughnut: ~50KB) handles the charting needs.
+- The session timeline (horizontal bar) is implemented as CSS-positioned `<div>` elements, not a chart.
+- Zero frontend build configuration. Files served as-is.
+
+**Component pattern (no framework):**
+```javascript
+// Each view is a JS module that renders into a container div
+export function renderTodayView(container, data) {
+  container.innerHTML = `
+    <div class="view-today">
+      <div class="stat-cards">
+        ${data.projects.map(p => `
+          <div class="card">
+            <h3>${p.project.displayName}</h3>
+            <span class="duration">${formatDuration(p.totalMs)}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `
+}
+```
+
+### 5. WebSocket for Real-Time Updates (Push Model)
+
+**Decision:** Server pushes state changes to all connected WebSocket clients. No polling from the browser.
+
+**Data flow:**
+```
+CLI (any terminal)                Dashboard Server              Browser
+     |                                 |                          |
+     |  tt pulse (writes to DB)        |                          |
+     |                                 |                          |
+     |           +---------+           |                          |
+     |           | Poll    |           |                          |
+     |           | timer   |           |                          |
+     |           | (1s)    |           |                          |
+     |           +---------+           |                          |
+     |                                 |                          |
+     |                                 |---- ws.send(status) --->|
+     |                                 |                          |
+     |  tt stop (writes to DB)         |                          |
+     |                                 |                          |
+     |                                 |---- ws.send(stopped) -->|
+     |                                 |                          |
+```
+
+**Server-side poll mechanism:**
+
+The server checks for state changes every 1 second via `setInterval`. It compares the current state with the previously broadcast state and only sends a message when something changed.
+
+```typescript
+// Pseudocode for the poll loop
+let lastState: string | null = null
+
+setInterval(() => {
+  const currentStatus = reportService.today()
+  const activeSession = sessionService.now()
+  const stateKey = JSON.stringify({ activeSession, todayTotal: currentStatus.grandTotalMs })
+
+  if (stateKey !== lastState) {
+    lastState = stateKey
+    broadcast({ type: "status", data: { activeSession, today: currentStatus } })
   }
-  return repo.create({ projectId, terminalId, startedAt: Date.now() })
-}
+}, 1000)
 ```
 
-### Pattern 3: Repository Pattern with Drizzle ORM + bun:sqlite
+**Why a poll timer instead of file watching:**
+- SQLite WAL does not emit filesystem events on every write in a way that is reliably detectable.
+- A 1-second `setInterval` checking for session state changes is trivial CPU cost.
+- The poll reads from the same in-process DB connection -- sub-millisecond.
+- Avoids complexity of `fs.watch` on WAL files, which is platform-dependent and unreliable.
 
-**What:** Each entity (sessions, pulses, projects) has a dedicated repository class. Business logic calls repository methods; repositories own all SQL. Drizzle ORM provides type-safe schema definitions and query builders. The `bun:sqlite` driver (native, no compilation) provides the connection.
+**Client-side timer smoothing:**
 
-**When to use:** Always — this is the baseline for any persistent CLI tool. Separates schema from queries from business logic.
+Between server pushes, the browser runs its own `setInterval` (1s) to increment the displayed timer. This prevents the timer from appearing to "jump" on each server update. When a server message arrives, the client resets its local timer to the authoritative server value.
 
-**Trade-offs:**
-- Pro: Drizzle's schema-as-code enables type-safe queries with auto-completion; migration files are diffable
-- Pro: `bun:sqlite` is synchronous by default — no async overhead for simple CLI commands
-- Con: Drizzle's SQLite migration story is slightly more complex than raw SQL; worth accepting for type safety
-
-### Pattern 4: Idle Detection via Threshold Comparison
-
-**What:** No polling thread or timer required. Idle state is computed on-demand by comparing `NOW - lastPulseTimestamp` against configured thresholds. Soft idle (8 min) prompts user on next status check. Hard idle (20 min) auto-pauses the session in the database.
-
-**When to use:** Stateless CLI tools where a persistent daemon would add complexity. Called either on each `tt status` invocation or by a lightweight launchd timer.
-
-**Trade-offs:**
-- Pro: completely stateless — thresholds are config values, not runtime state
-- Pro: no timer drift, no background processes to leak
-- Con: auto-pause is not instantaneous — it fires on next CLI invocation or timer tick
-
-**Example:**
+**WebSocket message protocol:**
 ```typescript
-// IdleDetector.ts
-export function computeIdleState(
-  lastPulseAt: number,
-  nowMs: number,
-  config: { softIdleMs: number; hardIdleMs: number }
-): 'active' | 'soft-idle' | 'hard-idle' {
-  const elapsed = nowMs - lastPulseAt
-  if (elapsed >= config.hardIdleMs) return 'hard-idle'
-  if (elapsed >= config.softIdleMs) return 'soft-idle'
-  return 'active'
+// Server -> Client
+type ServerMessage =
+  | { type: "status"; data: { active: ActiveSession | null; today: TodaySummary } }
+  | { type: "action_result"; data: { success: boolean; error?: string } }
+
+// Client -> Server (for quick actions)
+type ClientMessage =
+  | { type: "start"; project: string }
+  | { type: "stop" }
+```
+
+### 6. API Layer: Thin Wrappers Around Existing Services
+
+**Decision:** API route handlers are thin functions that call existing services and return JSON. No new framework.
+
+**Why:**
+- The services already exist: `createReportService()`, `createSessionService()`.
+- `Bun.serve()` natively returns `Response` objects. No framework needed for ~10 endpoints.
+- Adding Hono or Elysia would add dependencies for zero benefit on a local-only, auth-free API.
+
+**Handler pattern:**
+```typescript
+// src/dashboard/api/status.ts
+import { createReportService, createSessionService } from '../../cli/helpers'
+
+export function handleStatus(): Response {
+  const reportService = createReportService()
+  const sessionService = createSessionService()
+
+  const today = reportService.today()
+  const active = sessionService.now()
+
+  return Response.json({
+    success: true,
+    data: { active, today },
+  })
 }
 ```
+
+**Important:** Handlers call the same factory functions (`createReportService()`, `createSessionService()`) that CLI commands use. These functions internally call `getDb()` which returns the singleton DB connection. No new wiring needed.
+
+**Response format follows the existing project pattern:**
+```typescript
+interface ApiResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+}
+```
+
+### 7. Dashboard-Specific Service
+
+**Decision:** Create a new `createDashboardService({ repos })` for queries that the CLI does not need but the dashboard does: timeline data, earnings breakdowns, and weekly comparison.
+
+**What goes here (new queries):**
+- `timeline(date)` -- Returns sessions for a specific day as segments with project, start, end, and color. Used to render the horizontal timeline bar.
+- `earnings(period)` -- Returns billable totals per project with rate * hours calculation. The CLI has this in the week command output, but the dashboard needs it in a different shape (per-project breakdown with running totals).
+- `weekComparison()` -- This week vs last week totals for comparison display.
+
+**What does NOT go here:**
+- `today()`, `week()`, `log()`, `allProjects()` -- these already exist in `createReportService()`.
+- `start()`, `stop()`, `now()` -- these already exist in `createSessionService()`.
+
+## Component Boundaries
+
+### New Components
+
+| Component | Location | Responsibility | LOC Estimate |
+|-----------|----------|---------------|--------------|
+| Dashboard command | `src/cli/commands/dashboard.ts` | Parse --port/--no-open args, start server, open browser | ~40 |
+| Server setup | `src/dashboard/server.ts` | Configure Bun.serve(), routes, WebSocket | ~120 |
+| API: status | `src/dashboard/api/status.ts` | GET /api/status (active session + timer) | ~30 |
+| API: sessions | `src/dashboard/api/sessions.ts` | GET /api/sessions (log with date range) | ~40 |
+| API: projects | `src/dashboard/api/projects.ts` | GET /api/projects (summaries + earnings) | ~30 |
+| API: actions | `src/dashboard/api/actions.ts` | POST /api/actions/start, /api/actions/stop | ~60 |
+| API: timeline | `src/dashboard/api/timeline.ts` | GET /api/timeline (day segments) | ~40 |
+| WebSocket manager | `src/dashboard/ws/manager.ts` | Client set, broadcast, poll loop | ~80 |
+| Dashboard service | `src/core/dashboard/dashboard-service.ts` | Timeline, earnings, comparison queries | ~150 |
+| Dashboard types | `src/core/dashboard/types.ts` | Timeline segment, earnings types | ~40 |
+| Frontend: index.html | `src/dashboard/public/index.html` | Single HTML page, view containers | ~50 |
+| Frontend: style.css | `src/dashboard/public/style.css` | Dark theme, card layout, timeline | ~350 |
+| Frontend: app.js | `src/dashboard/public/app.js` | Tab routing, WebSocket client, render dispatch | ~120 |
+| Frontend: charts.js | `src/dashboard/public/charts.js` | Chart.js initialization and rendering | ~100 |
+
+### Modified Components
+
+| Component | Change | Risk |
+|-----------|--------|------|
+| `src/cli/index.ts` | Add `dashboard` subcommand via `subCommands.set()` | LOW -- one lazy import registration |
+| `package.json` | Add `chart.js` dependency | LOW |
+| Build script | Verify `--compile` embeds dashboard public/ files | MEDIUM -- needs testing |
+
+### Unchanged Components (Reused As-Is)
+
+| Component | How Dashboard Uses It |
+|-----------|----------------------|
+| `createReportService()` | `today()`, `week()`, `log()`, `allProjects()` power API endpoints |
+| `createSessionService()` | `start()`, `stop()`, `now()` power quick actions + status |
+| `getDb()` / `createRepositories()` | Shared DB connection -- same singleton |
+| `computeSessionDuration()` | Duration calculation in timeline and earnings |
+| All 7 repository functions | Session, project, note, tag, pulse reads |
+| `loadConfig()` | Read project rates for earnings display |
+| `resolveProject()` | Project lookup for start action |
+| `TimeTrackerError` hierarchy | Error handling in API responses |
 
 ## Data Flow
 
-### Hook-Triggered Pulse Flow
+### Read Path (Dashboard Loading)
 
 ```
-Claude Code fires lifecycle event (SessionStart, Stop, PreToolUse, PostToolUse)
-    ↓
-Shell hook script (~/.claude/hooks/*.sh)
-    ↓  exec in <10ms
-tt pulse --terminal-id $TT_TERMINAL_ID --session-id $CLAUDE_SESSION_ID
-    ↓
-Command Router → PulseHandler.recordPulse()
-    ↓                         ↓
-PulseRepository.insert()    SessionManager.ensureActive()
-    ↓                         ↓
-pulses table               sessions table (attach or create)
+Browser GET /api/today
+  -> server.ts routes match
+    -> handleToday()
+      -> createReportService()
+        -> repos.sessions.findByDateRange(...)
+          -> SQLite SELECT (indexed, <1ms)
+        -> aggregateByProject()
+      -> Response.json({ success: true, data })
+  -> Browser renders view
 ```
 
-### Manual Start/Stop Flow
+### Write Path (Quick Actions from Browser)
 
 ```
-Developer: tt start [project]
-    ↓
-Command Router → SessionManager.start(project, options)
-    ↓
-ProjectResolver.resolve(cwd, override)    GitCapture.snapshot()
-    ↓                                          ↓
-canonical projectId                      { branch, sha }
-    ↓──────────────────────────────────────────┘
-SessionRepository.create({ projectId, branch, sha, startedAt })
-    ↓
-sessions table (new row, end_time NULL)
-    ↓
-stdout: "Started tracking [project] on branch [branch]"
+Browser clicks "Start" on project "acme"
+  -> WebSocket sends { type: "start", project: "acme" }
+  -> server.ts websocket.message handler
+    -> createSessionService()
+      -> lifecycleService.start("acme", "dashboard")
+        -> SQLite INSERT
+    -> ws.send({ type: "action_result", data: { success: true } })
+  -> Next poll tick (1s) detects new active session
+    -> broadcast { type: "status", data: { active: {...}, today: {...} } }
+  -> All browser tabs update simultaneously
 ```
 
-### Idle Check / Auto-Pause Flow
+### Real-Time Path (Timer Tick)
 
 ```
-launchd timer fires every 5 min   OR   `tt status` invoked
-    ↓
-SessionManager.checkIdle(activeSession)
-    ↓
-PulseRepository.getLatestForProject(projectId)
-    ↓
-IdleDetector.computeIdleState(lastPulseAt, now, config)
-    ↓
-'hard-idle' → SessionRepository.autoPause(sessionId, pausedAt: lastPulseAt + hardIdleMs)
-'soft-idle' → warn on stdout only
-'active'    → no-op
+setInterval (server-side, 1000ms)
+  -> Read active session from DB
+  -> Compute elapsed time
+  -> Compare with last broadcast state
+  -> If changed: broadcast to all WebSocket clients
+  -> If unchanged: skip (no traffic)
 ```
 
-### Report Flow
+## Directory Structure
 
 ```
-tt week  OR  tt projects
-    ↓
-Command Router → ReportEngine.generate(query)
-    ↓
-SessionRepository.findByDateRange(from, to)   ProjectRepository.findAll()
-    ↓                                              ↓
-raw session rows with durations            project metadata + rates
-    ↓──────────────────────────────────────────────┘
-ReportEngine aggregates (group by project, sum durations, apply rate)
-    ↓
-formatters.ts (table / plain text / JSON)
-    ↓
-stdout
+src/
+  cli/
+    commands/
+      dashboard.ts          <- NEW: starts server, opens browser
+    index.ts                <- MODIFIED: register dashboard subcommand
+  core/
+    dashboard/              <- NEW: dashboard-specific service
+      dashboard-service.ts
+      types.ts
+      index.ts
+    session/                (unchanged)
+    reports/                (unchanged)
+  dashboard/                <- NEW: web server and frontend
+    server.ts               <- Bun.serve() config, routes, WebSocket
+    api/
+      status.ts             <- GET /api/status
+      sessions.ts           <- GET /api/sessions
+      projects.ts           <- GET /api/projects
+      actions.ts            <- POST /api/actions/*
+      timeline.ts           <- GET /api/timeline
+    ws/
+      manager.ts            <- WebSocket client tracking + poll loop
+    public/
+      index.html            <- Single page, dark theme
+      style.css             <- CSS custom properties, card layout
+      app.js                <- Tab routing, WebSocket client, DOM updates
+      charts.js             <- Chart.js setup and rendering
 ```
 
-### Export Flow
+## Scalability Considerations
 
+This is a local, single-user tool. "Scalability" means not degrading as data grows.
+
+| Concern | Now (hundreds of sessions) | 1 year (thousands) | 3 years (tens of thousands) |
+|---------|---------------------------|--------------------|-----------------------------|
+| API response time | <5ms | <10ms (indexed queries) | <20ms (add LIMIT to log endpoint) |
+| WebSocket broadcast | Trivial (1-2 clients) | Trivial | Trivial |
+| DB poll interval | 1s, sub-ms query | 1s, sub-ms query | 1s, ~1-2ms query |
+| Binary size | ~50MB (Bun runtime base) | Same | Same |
+| Frontend bundle | ~60KB (Chart.js tree-shaken + app JS) | Same | Same |
+
+## Anti-Patterns to Avoid
+
+### Anti-Pattern 1: Separate Daemon Process
+**What:** Running the dashboard server as a background daemon with IPC to the CLI.
+**Why bad:** SQLite write contention, pidfile management, crash recovery, process coordination.
+**Instead:** Same-process Bun.serve() in the `tt dashboard` command.
+
+### Anti-Pattern 2: Heavy Frontend Framework
+**What:** Using React, Next.js, Vite, or any framework requiring its own build pipeline.
+**Why bad:** Adds build complexity, dev server coordination, large bundle size for a local dashboard with 4 views.
+**Instead:** Vanilla JS with template literals. Chart.js for charts. CSS for the timeline bar.
+
+### Anti-Pattern 3: REST API Framework
+**What:** Adding Hono, Express, or Elysia for ~10 API endpoints on a local-only server.
+**Why bad:** Unnecessary dependency, middleware patterns that add complexity for zero auth/CORS needs.
+**Instead:** Raw `Bun.serve()` route handlers returning `Response.json()`.
+
+### Anti-Pattern 4: File Watching for Change Detection
+**What:** Using `fs.watch` on the SQLite database or WAL file to detect changes.
+**Why bad:** Platform-dependent, WAL writes don't always trigger filesystem events, multiple events per transaction.
+**Instead:** 1-second poll interval reading from the in-process DB connection.
+
+### Anti-Pattern 5: Duplicating Service Logic in API Handlers
+**What:** Re-implementing report/session logic in API handlers instead of calling existing services.
+**Why bad:** Logic divergence between CLI and dashboard, double maintenance burden.
+**Instead:** API handlers are thin wrappers -- call the existing service, serialize to JSON.
+
+### Anti-Pattern 6: Client-Side Data Fetching Waterfall
+**What:** Loading the page, then fetching status, then fetching today, then fetching timeline sequentially.
+**Why bad:** Perceived slow load. Each round-trip adds latency even on localhost.
+**Instead:** The initial page load should fetch `/api/status` which returns everything needed for the default view (active session, today summary, project list) in a single response.
+
+## Port Selection
+
+Use port **7117** by default. Allow override via `--port` flag or `TT_DASHBOARD_PORT` env var. Check if port is in use before starting and show a clear error message with the `--port` flag suggestion.
+
+## Browser Opening
+
+After `Bun.serve()` starts, automatically open the URL in the default browser:
+```typescript
+Bun.spawn(["open", `http://localhost:${port}`])  // macOS
 ```
-tt export --format csv --from 2026-01-01 --to 2026-01-31
-    ↓
-ExportService.export(format, dateRange)
-    ↓
-SessionRepository.findByDateRange(from, to)
-    ↓
-ExportService.serialize(sessions, 'csv')
-    ↓
-stdout or --output file.csv
+
+Add `--no-open` flag to suppress automatic browser opening.
+
+## Graceful Shutdown
+
+On SIGINT/SIGTERM:
+1. Stop the poll interval (`clearInterval`)
+2. Close all WebSocket connections
+3. Stop the HTTP server (`server.stop()`)
+4. Close the DB connection (`closeDb()`)
+5. Exit cleanly
+
+```typescript
+process.on("SIGINT", () => {
+  clearInterval(pollInterval)
+  server.stop()
+  closeDb()
+  process.exit(0)
+})
 ```
-
-## Scaling Considerations
-
-This tool is single-user local software. Scaling is not a concern at runtime. The relevant scaling axis is data volume over time.
-
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| 1 year of data (~5k sessions) | Default SQLite with WAL mode; no changes needed |
-| 5 years of data (~25k sessions) | Add compound indexes on `(project_id, started_at)`; existing schema handles this |
-| 10+ years / archive use | Add `tt archive --before 2024-01-01` to move old rows to archived_sessions; main table stays fast |
-
-### Scaling Priorities
-
-1. **First bottleneck:** Report queries scanning all sessions across all time — fix with compound index on `(project_id, started_at)` from day one
-2. **Second bottleneck:** Export of large date ranges — stream rows rather than loading all into memory; Drizzle supports cursor-based iteration
-
-## Anti-Patterns
-
-### Anti-Pattern 1: Long-Running Daemon for Session State
-
-**What people do:** Spawn a background daemon process that holds session state in memory, write a PID file, communicate via Unix socket.
-
-**Why it's wrong:** Adds process lifecycle complexity (crash recovery, stale PID files, restart on reboot), required IPC serialization, and makes the system fragile against terminal kills. For a personal tool with one user and low write frequency, there is no benefit that justifies this overhead.
-
-**Do this instead:** Store all state in SQLite. The database is the single source of truth. Each CLI invocation opens and closes the database connection. SQLite's WAL mode handles the minor concurrency from multiple terminals.
-
-### Anti-Pattern 2: Polling for Activity from Hooks
-
-**What people do:** Hook scripts start a polling loop or background timer that checks for activity every N seconds.
-
-**Why it's wrong:** Hook scripts run in the critical path of Claude Code startup/shutdown. A polling loop in a hook would block or require backgrounding, making the hook unreliable and potentially causing 100ms+ startup latency.
-
-**Do this instead:** Hooks are fire-and-forget. They exec `tt pulse` (a fast, stateless write to SQLite) and exit immediately. Idle detection runs on the receiving side, not in the hook.
-
-### Anti-Pattern 3: Storing Session State in a JSON File
-
-**What people do:** Track active sessions in a `~/.timetracker/active.json` file, parse it on every command.
-
-**Why it's wrong:** Race conditions between multiple terminals writing simultaneously; no transactional guarantees; no query capability for reporting; manual migration story.
-
-**Do this instead:** Use SQLite from the start. It handles concurrent access, provides ACID transactions, and queries replace hand-written aggregation logic.
-
-### Anti-Pattern 4: One God Service Class
-
-**What people do:** Put all business logic (session management, idle detection, reporting, export) into a single `TimeTracker` class.
-
-**Why it's wrong:** Makes unit testing hard (must mock everything for any single test), violates single-responsibility, creates uncontrolled coupling between idle detection and export formats.
-
-**Do this instead:** Separate SessionManager, IdleDetector, ReportEngine, ExportService. Each has one job, one set of dependencies, and is independently testable.
-
-### Anti-Pattern 5: Tracking Every Keystroke / Tool Call as a Pulse
-
-**What people do:** Fire a heartbeat on every PreToolUse/PostToolUse call (potentially dozens per minute).
-
-**Why it's wrong:** At 60+ tool calls per hour, the pulses table grows unbounded. Write amplification is unnecessary — idle detection only needs to know the last-seen time.
-
-**Do this instead:** Rate-limit pulse writes. Only insert if the last pulse for this terminal+project is older than 60 seconds (WakaTime uses 2 minutes). The hook checks the last inserted timestamp before writing, keeping the write load negligible.
-
-## Integration Points
-
-### External Services
-
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| Claude Code hooks | Shell script execs `tt pulse` as subprocess | Scripts must complete in <100ms; always fire-and-forget |
-| Git | Shell subprocess: `git rev-parse HEAD`, `git branch --show-current` | Only at session start/end; not on every pulse |
-| ClickUp (future) | Export to CSV/JSON → manual import | v1 does not call ClickUp API; data format must include project name, start, end, duration, notes |
-| launchd (macOS) | Optional periodic plist to run `tt idle-check` every 5 minutes | Enables auto-pause even when no hooks fire |
-
-### Internal Boundaries
-
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| Hook scripts → CLI binary | Process exec (subprocess) | No shared memory; env vars pass terminal/session IDs |
-| CLI commands → Core | Direct TypeScript function calls | Commands are thin; all logic in core/ |
-| Core → Repositories | Interface-typed method calls | Core depends on Repository interfaces, not concrete classes |
-| Repositories → DB client | Drizzle ORM queries | Single shared `client.ts` instance; bun:sqlite is synchronous |
-| Report Engine → Formatters | Pure function calls | Formatters take data arrays, return strings; no I/O |
-
-## Suggested Build Order
-
-Dependencies flow from bottom to top. Build in this order:
-
-1. **DB schema + repositories** — Everything depends on this. Define `sessions`, `pulses`, `projects`, `session_terminals` tables with Drizzle. Write repositories with basic CRUD. No business logic yet.
-
-2. **ProjectResolver + ConfigLoader** — Needed before SessionManager. Reads cwd, resolves project from config aliases.
-
-3. **SessionManager (start/stop/attach)** — Core feature. Depends on repositories and ProjectResolver. Multi-terminal attach logic lives here.
-
-4. **CLI binary + Command Router + `tt start` / `tt stop` / `tt status`** — First usable version. Manual tracking only. Wire commands to SessionManager.
-
-5. **PulseHandler + IdleDetector** — Activity pulse writes and idle threshold logic. Depends on repositories and SessionManager. `tt pulse` subcommand.
-
-6. **Hook scripts** — Shell wrappers calling `tt pulse`. Depend on the compiled binary being available.
-
-7. **GitCapture** — Capture branch/SHA at session boundaries. Add to SessionManager.start().
-
-8. **ReportEngine + `tt week` / `tt projects`** — Depends on SessionRepository with indexed queries. Aggregation and formatting.
-
-9. **ExportService + `tt export`** — Depends on ReportEngine patterns. CSV and JSON serializers.
-
-10. **Edit/split/merge/undo commands** — Depends on stable SessionRepository. Mutation operations on existing sessions.
 
 ## Sources
 
-- WakaTime Plugin Architecture: [https://wakatime.com/help/creating-plugin](https://wakatime.com/help/creating-plugin) — Heartbeat/pulse pattern, rate-limiting, fire-and-forget from hooks (HIGH confidence, official docs)
-- Timetrap CLI Architecture: [https://github.com/samg/timetrap](https://github.com/samg/timetrap) — Session model, command interface, SQLite storage, formatter extensibility (HIGH confidence, production open-source tool)
-- Python CLI Time Tracker pattern: [https://dev.to/dmikhr/building-cli-time-tracker-with-python-o0g](https://dev.to/dmikhr/building-cli-time-tracker-with-python-o0g) — Three-layer CLI architecture, NULL finish_time for active session detection (MEDIUM confidence, single source)
-- SQLite concurrent writes: [https://tenthousandmeters.com/blog/sqlite-concurrent-writes-and-database-is-locked-errors/](https://tenthousandmeters.com/blog/sqlite-concurrent-writes-and-database-is-locked-errors/) — WAL mode behavior for multi-terminal writes (HIGH confidence, technical deep-dive)
-- Drizzle ORM + bun:sqlite integration: [https://orm.drizzle.team/docs/connect-bun-sqlite](https://orm.drizzle.team/docs/connect-bun-sqlite) — Official driver documentation (HIGH confidence, official docs)
-- Bun CLI applications: [https://oneuptime.com/blog/post/2026-01-31-bun-cli-applications/view](https://oneuptime.com/blog/post/2026-01-31-bun-cli-applications/view) — Single binary compilation, CLI patterns with Bun (MEDIUM confidence)
-- Daemon vs Direct Mode pattern: [https://deepwiki.com/steveyegge/beads/6.1-daemon-vs-direct-mode](https://deepwiki.com/steveyegge/beads/6.1-daemon-vs-direct-mode) — Rationale for stateless vs daemon architectures (MEDIUM confidence)
-- Hexagonal Architecture for CLI tools: [https://tsh.io/blog/hexagonal-architecture](https://tsh.io/blog/hexagonal-architecture) — Multiple delivery mechanisms (CLI + future web) through same core (MEDIUM confidence)
-
----
-*Architecture research for: CLI-first time tracking tool (TimeTracker)*
-*Researched: 2026-02-27*
+- [Bun.serve WebSocket docs](https://bun.com/docs/runtime/http/websockets) - HIGH confidence
+- [Bun single-file executables](https://bun.com/docs/bundler/executables) - HIGH confidence
+- [Bun HTML & static sites](https://bun.com/docs/bundler/html-static) - HIGH confidence
+- [Bun routes + websocket type issue #17871](https://github.com/oven-sh/bun/issues/17871) - HIGH confidence
+- [Bun routes + websocket issue #18314](https://github.com/oven-sh/bun/issues/18314) - HIGH confidence

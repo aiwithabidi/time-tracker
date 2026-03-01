@@ -1,148 +1,268 @@
-# Stack Research
+# Technology Stack: v1.2 Web Dashboard
 
-**Domain:** CLI-first time tracking tool (Bun/TypeScript)
-**Researched:** 2026-02-27
-**Confidence:** MEDIUM-HIGH (core stack HIGH; some library versions MEDIUM due to rapid ecosystem movement)
+**Project:** TimeTracker Web Dashboard
+**Researched:** 2026-02-28
+**Scope:** Additions to existing Bun + bun:sqlite + drizzle-orm stack for local web dashboard
+**Overall confidence:** HIGH
 
 ---
 
-## Recommended Stack
+## Recommended Stack Additions
 
-### Core Technologies
+Only ONE new dependency is needed. Everything else is built into Bun or already in the project.
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| Bun | >=1.2 | Runtime, package manager, bundler, test runner | Mandated by project constraints; native TypeScript, built-in SQLite, fast shell script startup (<10ms cold start); Claude Code itself ships as a Bun-compiled binary |
-| TypeScript | ~5.7 (via Bun) | Language | Bun executes TS natively without a transpile step — no tsconfig trickery needed for the CLI |
-| gunshi | ^0.27 | CLI framework / argument parsing | Type-safe argument parsing built on Node's `parseArgs`; first-class Bun support; lazy sub-commands for fast startup; active in 2025; chosen by the "My JS CLI Stack 2025" reference author over citty/cac/cleye/commander |
-| drizzle-orm | ^0.45 | ORM / query builder over bun:sqlite | First-party Drizzle docs show bun:sqlite as a supported dialect; generates SQL migrations; type-safe queries without a full SQL string; thin abstraction that doesn't hide SQLite's synchronous API |
-| drizzle-kit | ^0.45 | Schema migrations (CLI companion) | `bunx drizzle-kit generate` and `bunx drizzle-kit migrate` work natively; keeps schema-to-migration workflow clean |
-| bun:sqlite | built-in | Local SQLite storage | Zero deps; 3-6x faster than better-sqlite3 for read queries; synchronous API matches CLI's single-process execution model; WAL mode supported via PRAGMA |
-| luxon | ^3.7 | Date/time — Duration, Interval, timezone | Built-in Duration and Interval types map directly to time-tracking math (elapsed, gaps, overlap detection); native IANA timezone via Intl (no tz file to bundle); immutable API matches project coding-style rule; v3.7.2 is current as of research date |
-| ink | ^6.8 | Terminal UI rendering for dashboards | React component model for terminal; `<Box>` flexbox layout, `<Text>` styling; used by Gatsby, Shopify, Parcel; v6.8.0 published 8 days before research date — actively maintained; works with Bun |
-| @inkjs/ui | ^2.0 | Pre-built ink components | Spinners, select inputs, progress bars, text inputs — avoids reimplementing common TUI patterns |
+### HTTP Server & WebSocket
 
-### Supporting Libraries
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Bun.serve() | Bun 1.3.x (native) | HTTP server + WebSocket | Zero dependencies. Bun's built-in server handles HTTP requests and WebSocket upgrades in a single `Bun.serve()` call. Native WebSocket support is built on uWebSockets (7x more req/s than Node + ws). The `routes` API (v1.2.3+) supports path parameters, static file serving via `Bun.file()`, and automatic ETag headers (v1.2.20+). A local dashboard with 5-6 routes does not need a framework. |
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| consola | ^3 | Structured terminal output (info, success, warn, error) | Non-interactive output paths (hook scripts, status lines); lighter than ink for simple log messages; used in the "My JS CLI Stack 2025" reference |
-| chalk | ^5 | Terminal string styling (colors, bold) | Colorizing output in consola log messages and raw stdout outside of ink render trees |
-| @clack/prompts | ^0.9 | Interactive prompts | `tt edit`, `tt note`, confirmation dialogs; 80% smaller than alternatives; component-style API that composes with ink flows |
-| zod | ^3.24 | Runtime validation | Validating config file, hook payloads, CLI option schemas (gunshi has Zod integration available) |
-| vitest | ^3 | Unit and integration tests | Bun's built-in test runner works, but vitest provides safe env-var mocking critical for CLI testing, in-source tests via `import.meta.vitest`, and richer assertion API |
+**Why not Hono/Elysia:** This is a local tool with 4-5 API routes and a static file serve. A framework adds a dependency, an abstraction layer, and middleware patterns for zero benefit at this scale. `Bun.serve()` handles routing, static files, and WebSocket in ~50 lines.
 
-### Development Tools
+**Server pattern:**
+```typescript
+Bun.serve({
+  port: 7117,
+  routes: {
+    "/": Bun.file("./src/dashboard/public/index.html"),
+    "/style.css": Bun.file("./src/dashboard/public/style.css"),
+    "/app.js": Bun.file("./src/dashboard/public/app.js"),
+    "/charts.js": Bun.file("./src/dashboard/public/charts.js"),
+    "/api/status": () => getStatus(),
+    "/api/sessions": (req) => getSessions(req),
+    "/api/projects": () => getProjects(),
+  },
+  fetch(req, server) {
+    if (new URL(req.url).pathname === "/ws") {
+      server.upgrade(req);
+      return;
+    }
+    return new Response("Not found", { status: 404 });
+  },
+  websocket: {
+    open(ws) { /* client connected */ },
+    message(ws, msg) { /* handle start/stop/switch commands */ },
+    close(ws) { /* cleanup */ },
+  },
+});
+```
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| tsdown | Bundler for distribution binary | Rust-based (Rolldown); superior tree-shaking vs esbuild; produces minimal bundle before `bun build --compile`; use when distributing as an npm package |
-| `bun build --compile` | Single-file executable | Embeds Bun runtime + app into one binary; use for direct PATH installation; `--target bun-darwin-arm64` for Apple Silicon |
-| biome | Linting + formatting | Replaces ESLint + Prettier in one tool; fast; compatible with Bun projects |
-| `bun test` | Test runner (built-in) | Use for unit tests if vitest feels heavy; vitest preferred for CLI tools due to env mocking |
+### Frontend Approach
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Vanilla JS + HTML | N/A | Dashboard UI | No build step, no bundler, no node_modules bloat. A local dashboard with 3-4 views does not need React, Vue, or Svelte. Modern browser APIs (fetch, WebSocket, template literals, CSS custom properties) cover everything needed. Ship plain HTML/CSS/JS files served directly by Bun. |
+
+**Why not React/Vue/Svelte:** This dashboard has ~4 views with server-driven data. There is no complex client state, no routing between dozens of views, no form-heavy workflows. A framework would add: a build pipeline, a bundler config, HMR setup, framework-specific knowledge -- all for a tool only one person uses locally. Vanilla JS with modern DOM APIs is simpler, faster to load, and zero-dependency.
+
+**Why not HTMX:** Tempting for server-rendered HTML, but the real-time timer requires client-side JS anyway (WebSocket connection + DOM updates every second for the live timer). Once you need that much client JS, HTMX adds a layer without reducing complexity.
+
+**Approach:** Single HTML file with client-side tab switching. Each "view" (Today, Week, Projects, Timeline) is a JS module that renders into a container. Data fetched via `fetch()` on tab switch, live updates pushed via WebSocket.
+
+### Charting
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Chart.js | ^4.5.1 | Bar charts, doughnut charts | Best balance of features and size for this use case. Supports bar (weekly hours per project per day), doughnut (project time breakdown), and line (trends) -- all required chart types. Tree-shakeable via selective component registration. ~50KB when tree-shaken to bar + doughnut only. Well-documented, no framework dependency, works with vanilla JS and `<canvas>`. |
+
+**Why not uPlot:** uPlot is smaller (~50KB full) and faster for time-series, but it does NOT support pie or doughnut charts. The project breakdown view needs a doughnut chart. uPlot only supports line, area, OHLC, and bar. Missing a core chart type is a dealbreaker. (Verified: uPlot v1.6.32, GitHub README explicitly lists supported types.)
+
+**Why not D3:** Massive overkill. D3 is a low-level visualization toolkit. Building a bar chart in D3 takes 50+ lines vs 10 lines in Chart.js. No justification for a local dashboard.
+
+**Why not ApexCharts:** Larger bundle (~125KB), heavier runtime. Good library but oversized for 3 chart instances in a local tool.
+
+**Tree-shaking approach for minimal bundle:**
+```typescript
+import {
+  Chart, BarController, BarElement, CategoryScale, LinearScale,
+  DoughnutController, ArcElement, Tooltip, Legend, Colors
+} from 'chart.js';
+
+Chart.register(
+  BarController, BarElement, CategoryScale, LinearScale,
+  DoughnutController, ArcElement, Tooltip, Legend, Colors
+);
+```
+
+This registers only bar + doughnut support, keeping the effective bundle well under 50KB.
+
+**Note on timeline visualization:** The session timeline (color-coded horizontal bar showing project switches throughout a day) does NOT need Chart.js. It is better implemented as plain HTML `<div>` elements with absolute positioning and CSS backgrounds. This avoids fighting Chart.js's axis model for a non-standard visualization.
+
+### CSS Approach
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Plain CSS with custom properties | N/A | Dark theme styling | No build step needed. CSS custom properties handle theming natively. A single CSS file with ~300-400 lines covers a dark dashboard with cards, tables, and charts. No preprocessor, no Tailwind (needs build), no CSS-in-JS (needs framework). |
+
+**Dark theme palette (GitHub-dark inspired, matches terminal aesthetic):**
+```css
+:root {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-card: #1c2128;
+  --border: #30363d;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --accent: #58a6ff;
+  --success: #3fb950;
+  --warning: #d29922;
+  --danger: #f85149;
+  --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+}
+```
+
+---
+
+## What NOT to Add
+
+| Category | Don't Add | Why Not |
+|----------|-----------|---------|
+| HTTP framework | Hono, Elysia, Express | 5 routes don't need a framework; Bun.serve() is sufficient |
+| Frontend framework | React, Vue, Svelte | 4 views with server-driven data; vanilla JS is simpler, no build step |
+| CSS framework | Tailwind, Bootstrap | Needs build pipeline; ~300 lines of custom CSS is enough |
+| Bundler | Vite, webpack, esbuild | No JSX, no TypeScript in browser, no imports to resolve; plain `<script>` tags work |
+| State management | Redux, Zustand, signals | Server is source of truth via WebSocket; client state is trivial (active tab, timer display) |
+| WebSocket library | Socket.IO, ws | Bun has native WebSocket; browser has native WebSocket API |
+| Template engine | EJS, Handlebars, Pug | Template literals in JS are sufficient for 4 views |
+| Router (client) | React Router, page.js | Tab switching via event listeners; no URL routing needed for a local tool |
+| Testing (frontend) | Playwright, Cypress | Local tool, single user; visual inspection sufficient for UI; backend API tested via existing test suite |
+| Live reload | browser-sync, livereload | Development convenience not worth a dependency; manual refresh is fine |
+
+---
+
+## Integration Points with Existing Stack
+
+### Direct Service Reuse (Critical Design Decision)
+
+The web server imports and uses the SAME service layer as the CLI. No separate API abstraction needed.
+
+```
+src/services/session-service.ts    --> API routes call these directly
+src/services/reporting-service.ts  --> Report/chart data endpoints
+src/services/session-query-service.ts --> Session listing/filtering
+src/db/repositories/               --> Same repository layer, same SQLite DB
+```
+
+The dashboard server runs in the same Bun process, accessing the same database file. This is a local tool -- the "API" is just function calls with JSON serialization on the response.
+
+### WebSocket Real-Time Updates
+
+The WebSocket broadcasts state changes to connected browser clients. Implementation approach:
+
+1. **Server polls active session** every 1 second via `setInterval`
+2. When state changes (session started/stopped, idle status changed), push update to all connected clients
+3. Client receives update and re-renders the affected view component
+4. Timer display updates client-side between server pushes (client-side `setInterval` for smooth seconds counting)
+
+No need for a pub/sub system or event emitter library. A simple polling loop on the server + `ws.send()` covers this.
+
+### CLI Command Integration
+
+The `tt dashboard` command:
+1. Starts the HTTP server via `Bun.serve()`
+2. Opens the browser: `Bun.spawn(["open", `http://localhost:${port}`])`
+3. Keeps the process running until Ctrl+C
+4. Reuses existing service instances (same DB connection, same config)
+
+### Quick Actions (Start/Stop/Switch from Browser)
+
+POST endpoints or WebSocket messages that call the same service methods as CLI commands:
+- `POST /api/start` --> `sessionService.startSession(project)`
+- `POST /api/stop` --> `sessionService.stopSession()`
+- `POST /api/switch` --> `sessionService.stopSession()` then `sessionService.startSession(newProject)`
+
+### Port Convention
+
+Use port `7117` as default (easy to remember). Configurable via `TT_DASHBOARD_PORT` env var or config file.
+
+---
+
+## File Organization for Dashboard
+
+```
+src/
+  dashboard/
+    server.ts              -- Bun.serve() setup, routes, WebSocket handler
+    api/
+      status.ts            -- GET /api/status (active session, timer, idle state)
+      sessions.ts          -- GET /api/sessions?range=today|week|month
+      projects.ts          -- GET /api/projects (summaries with earnings)
+      actions.ts           -- POST /api/start, /api/stop, /api/switch
+    public/
+      index.html           -- Single HTML file, all views as tab sections
+      style.css            -- Dark theme, card layout, responsive
+      app.js               -- Main JS: tab routing, WebSocket client, DOM updates
+      charts.js            -- Chart.js initialization and data rendering
+```
+
+Total new files: ~8 files. No new directories outside `src/dashboard/`.
 
 ---
 
 ## Installation
 
 ```bash
-# Core
-bun add gunshi drizzle-orm luxon ink @inkjs/ui
-
-# Supporting
-bun add consola chalk @clack/prompts zod
-
-# Dev dependencies
-bun add -D drizzle-kit vitest biome tsdown @types/luxon @types/bun
+# Only ONE new dependency
+bun add chart.js
 ```
+
+Everything else is built into Bun (HTTP server, WebSocket, static file serving) or already in the project (luxon for dates, zod for validation, existing service layer).
 
 ---
 
 ## Alternatives Considered
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| gunshi | Commander.js | Commander.js is fine for simple tools; skip it for this project — type safety is bolted on, not built in; gunshi is better for TypeScript-first CLIs with many subcommands |
-| gunshi | Clipanion | Clipanion is excellent (powers Yarn) and type-safe via class decorators; gunshi is lighter and less opinionated; either is a valid choice — gunshi won on bundle size and simpler API for this scope |
-| gunshi | Citty | Citty (UnJS) is popular but its alias/subcommand ergonomics are awkward (duplicate key workaround); gunshi is more idiomatic for 2025 TypeScript projects |
-| gunshi | oclif | oclif is the right choice for large multi-team CLI frameworks (Salesforce, Heroku); unnecessary complexity for a single-developer personal tool |
-| gunshi | Bunli | Bunli is Bun-specific with Zod integration; promising but no verified version, low adoption signal; gunshi has more documented real-world usage in 2025 |
-| bun:sqlite + drizzle-orm | better-sqlite3 | Use better-sqlite3 if this project ever needs to run on Node.js — the APIs are nearly identical. For pure Bun, bun:sqlite has zero setup and outperforms it |
-| bun:sqlite + drizzle-orm | Prisma | Prisma adds a daemon process and complex schema DSL; overkill for a local single-user CLI; startup overhead would violate the <100ms hook constraint |
-| luxon | date-fns | date-fns has no built-in Duration or Interval types, no timezone support without date-fns-tz addon; luxon's Duration and Interval are the correct primitives for time-tracking math |
-| luxon | Temporal API | TC39 Stage 3; Chrome 144 (Jan 2026) ships it but **Bun has an open issue for Temporal support** (not yet implemented); do not use native Temporal in Bun yet — use the polyfill only if needed |
-| luxon | dayjs | dayjs uses Intl (slow) and its plugin model fragments the API; fine for display formatting, wrong for duration arithmetic |
-| ink | blessed / neo-blessed | blessed is unmaintained; neo-blessed is a fork with limited TypeScript support; ink's React model is more maintainable and has an active ecosystem |
-| vitest | bun test | bun test lacks safe env-var mocking and test isolation features critical for CLI tools that read environment variables (CLAUDE_SESSION_ID, TT_TERMINAL_ID) |
+| Category | Recommended | Alternative | Why Not Alternative |
+|----------|-------------|-------------|---------------------|
+| HTTP server | Bun.serve() | Hono on Bun | Framework overhead for 5 routes; adds abstraction without benefit |
+| HTTP server | Bun.serve() | Elysia | Same as Hono; even more opinionated, unnecessary for local tool |
+| Frontend | Vanilla JS | Svelte (compiled) | Requires build step and tooling for 4 views; overkill |
+| Frontend | Vanilla JS | Preact + HTM | Smaller than React but still adds JSX-like syntax and virtual DOM for no benefit |
+| Charts | Chart.js 4 | uPlot | No pie/doughnut support; time-series only |
+| Charts | Chart.js 4 | ApexCharts | 2.5x larger bundle (~125KB vs ~50KB tree-shaken) |
+| Charts | Chart.js 4 | D3.js | Low-level toolkit, not a charting library; 10x more code for same result |
+| CSS | Plain CSS | Tailwind CSS | Requires build pipeline (PostCSS); utility classes add learning curve for ~300 lines of CSS |
+| CSS | Plain CSS | Open Props | Nice custom properties library but adds a dependency for something trivially hand-written |
+| WebSocket | Bun native | Socket.IO | 70KB+ library for features not needed (rooms, namespaces, fallbacks); local tool has one client |
+| Real-time | Server polling + push | SSE (Server-Sent Events) | SSE is one-directional; need bidirectional for quick actions (start/stop from browser) |
 
 ---
 
-## What NOT to Use
+## Version Verification
 
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| Moment.js | Deprecated by its own authors; mutable API; large bundle | luxon |
-| Prisma | Spawns a background daemon; adds 200ms+ startup time; violates <100ms hook constraint | drizzle-orm + bun:sqlite |
-| better-sqlite3 | Requires native compilation; node-gyp pain; redundant when bun:sqlite is built-in and faster | bun:sqlite |
-| Temporal API (native) | Bun does not yet implement it (open issue #15853 on oven-sh/bun) | luxon; add @js-temporal/polyfill only if API parity matters |
-| oclif | Framework-in-a-framework complexity; plugin scaffold adds overhead inappropriate for a personal tool | gunshi |
-| yargs | Designed pre-TypeScript; type definitions feel retrofitted; slow startup vs gunshi | gunshi |
-| blessed / neo-blessed | Abandoned or minimally maintained; no React component model | ink |
-| tsx / ts-node | Unnecessary — Bun runs TypeScript natively at startup | `bun run` directly |
-| Inquirer.js | Larger and heavier than @clack/prompts; less modern API | @clack/prompts |
+| Technology | Version | Verified Date | Source |
+|------------|---------|---------------|--------|
+| Bun | 1.3.9 | 2026-02-28 | [Bun releases](https://github.com/oven-sh/bun/releases) |
+| Bun.serve routes API | Available since v1.2.3 | 2026-02-28 | [Bun HTTP Server docs](https://bun.com/docs/runtime/http/server) |
+| Bun native WebSocket | Built-in (uWebSockets) | 2026-02-28 | [Bun WebSocket docs](https://bun.com/docs/runtime/http/websockets) |
+| Chart.js | 4.5.1 | 2026-02-28 | [npm chart.js](https://www.npmjs.com/package/chart.js) |
+| uPlot | 1.6.32 (rejected) | 2026-02-28 | [GitHub](https://github.com/leeoniya/uPlot) |
 
 ---
 
-## Stack Patterns by Variant
+## Confidence Assessment
 
-**For Claude Code hook scripts (PreToolUse, PostToolUse, SessionStart, Stop):**
-- Shell scripts call `tt` binary directly: `tt session start --project "$(pwd)"`
-- The binary must be compiled or on PATH; use `bun build --compile` for distribution
-- Hook scripts are bash/zsh — the CLI binary handles all logic; hooks stay thin
-- Startup time matters: gunshi's lazy subcommand loading + bun:sqlite synchronous reads keep cold start <50ms
-
-**For interactive dashboard commands (`tt week`, `tt projects`):**
-- Use ink for full terminal UI with flex layout and live-updating tables
-- Use @inkjs/ui for spinner during DB query, then render results table
-- Consider splitting: `tt week` outputs static table (consola + chalk), `tt week --live` uses ink
-
-**For non-interactive output (`tt status`, hook telemetry):**
-- Use consola + chalk for plain structured output
-- Avoid ink overhead when no interactivity is needed
-
-**For the local database:**
-- Enable WAL mode on first open: `db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;')`
-- Use drizzle-orm for all queries — never raw SQL strings outside the schema file
-- Use `db.transaction()` for session start/stop writes (atomic with git context capture)
-- Store durations as integer seconds; reconstruct luxon Duration on read
-
----
-
-## Version Compatibility
-
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| ink ^6.8 | React ^18 | ink v6 requires React 18; @inkjs/ui ^2.0 is the matching component library |
-| drizzle-orm ^0.45 | bun:sqlite built-in | drizzle-kit must match drizzle-orm minor version; pin both to same release line |
-| gunshi ^0.27 | Bun >=1.0, Node >=18 | Type-safe argument typing relies on TypeScript >=5.0 |
-| luxon ^3.7 | @types/luxon ^3.7 | Types are in a separate @types package — install both |
-| vitest ^3 | Bun >=1.2 | vitest can use bun as test runner via `--pool=vmForks`; check vitest docs for bun-specific config |
+| Decision | Confidence | Rationale |
+|----------|------------|-----------|
+| Bun.serve() for HTTP + WS | HIGH | Official Bun documentation, actively maintained, project already uses Bun |
+| Vanilla JS (no framework) | HIGH | Scope is 4 views with server-driven data; standard web APIs are sufficient |
+| Chart.js for charting | HIGH | Verified chart type support, tree-shaking docs, active maintenance, version confirmed |
+| Plain CSS | HIGH | Standard approach, no verification needed |
+| No additional dependencies beyond Chart.js | HIGH | All capabilities verified as built-in to Bun or browser APIs |
 
 ---
 
 ## Sources
 
-- [Bun SQLite docs](https://bun.com/docs/runtime/sqlite) — bun:sqlite API, WAL mode, performance claims — HIGH confidence
-- [Drizzle ORM bun:sqlite guide](https://orm.drizzle.team/docs/get-started/bun-sqlite-new) — setup, migration commands, schema definition — HIGH confidence
-- [gunshi GitHub](https://github.com/kazupon/gunshi) — framework features, v0.27 type system — MEDIUM confidence (actively developed, minor API churn possible)
-- [My JS CLI Stack 2025](https://ryoppippi.com/blog/2025-08-12-my-js-cli-stack-2025-en) — gunshi, tsdown, consola, vitest, bun as stack — MEDIUM confidence (single author, but well-reasoned with alternatives evaluated)
-- [Building CLI apps with TypeScript in 2026](https://hackers.pub/@hongminhee/2026/typescript-cli-2026) — Optique (not recommended here), Temporal API integration — LOW confidence on Optique (no version, low adoption signal)
-- [ink GitHub](https://github.com/vadimdemedes/ink) — v6.8.0, React-based TUI, Bun compatible — HIGH confidence
-- [Temporal support Bun issue #15853](https://github.com/oven-sh/bun/issues/15853) — Bun does NOT yet have native Temporal — HIGH confidence (open GitHub issue)
-- [Bun single-file executable docs](https://bun.com/docs/bundler/executables) — `--compile` flag for CLI distribution — HIGH confidence
-- WebSearch: luxon v3.7.2 current; date-fns lacks Duration/Interval; Temporal in Chrome 144 Jan 2026 — MEDIUM confidence
+- [Bun HTTP Server documentation](https://bun.com/docs/runtime/http/server) -- routes API, static file serving, ETag support
+- [Bun WebSocket documentation](https://bun.com/docs/runtime/http/websockets) -- native WebSocket, pub/sub, compression
+- [Bun v1.2.20 blog post](https://bun.com/blog/bun-v1.2.20) -- automatic ETag headers for static routes
+- [Chart.js documentation](https://www.chartjs.org/docs/) -- chart types, tree-shaking, Canvas rendering
+- [Chart.js integration guide](https://www.chartjs.org/docs/latest/getting-started/integration.html) -- selective component registration
+- [Chart.js npm](https://www.npmjs.com/package/chart.js) -- version 4.5.1 confirmed
+- [uPlot GitHub](https://github.com/leeoniya/uPlot) -- confirmed no pie/doughnut support (v1.6.32)
+- [Bun releases](https://github.com/oven-sh/bun/releases) -- v1.3.9 current
 
 ---
-
-*Stack research for: CLI-first time tracking tool (Bun/TypeScript)*
-*Researched: 2026-02-27*
+*Stack research for: v1.2 Web Dashboard (additions to existing CLI stack)*
+*Researched: 2026-02-28*
