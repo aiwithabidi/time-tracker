@@ -37,6 +37,21 @@ Effortless, accurate time tracking that works passively in the background — th
 - `tt alias add/list/remove` and `tt rate set/show` CLI commands — v1.1
 - 22 CLI commands total (up from 20) — v1.1
 
+### Current Milestone: v1.2 Web Dashboard
+
+**Goal:** Local web dashboard with real-time updates for visualizing time data across projects
+
+**Target features:**
+- `tt dashboard` command starts local server and opens browser
+- Today view with live timer, active/idle indicator, project breakdown
+- Weekly summary with hours per project per day, totals, week-over-week comparison
+- Project deep dive with session history, notes, tags, earnings
+- Session timeline (color-coded horizontal bar showing project switches throughout the day)
+- Earnings tracker (running billable totals per project for week/month)
+- Quick actions (start/stop/switch project from the dashboard)
+- Real-time updates via WebSocket (timer ticks, status changes without refresh)
+- Minimal dark theme matching terminal aesthetic
+
 ### Backlog
 
 - [ ] Activity pattern analytics (productive hours, focus time, idle ratios)
@@ -47,7 +62,7 @@ Effortless, accurate time tracking that works passively in the background — th
 
 ### Out of Scope
 
-- Web dashboard — CLI-first; rich TUI possible in future
+- Deployed/cloud dashboard — local only, no auth needed
 - Browser activity tracking — too invasive, Claude Code hooks are sufficient
 - Mobile app — CLI-first; view hours via ClickUp or spreadsheet export
 - Team features — this is a personal tool
@@ -94,4 +109,4 @@ Effortless, accurate time tracking that works passively in the background — th
 | Base TimeTrackerError class | Simplified error handling from 9-branch instanceof to single check | Good |
 
 ---
-*Last updated: 2026-02-28 after v1.1 milestone shipped*
+*Last updated: 2026-02-28 after v1.2 milestone started*
