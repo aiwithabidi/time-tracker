@@ -313,6 +313,22 @@ subCommands.set(
 )
 
 subCommands.set(
+  'alias',
+  lazy(() => import('./commands/alias').then((m) => m.default), {
+    name: 'alias',
+    description: 'Manage project directory aliases (usage: tt alias add|list|remove)',
+  })
+)
+
+subCommands.set(
+  'rate',
+  lazy(() => import('./commands/rate').then((m) => m.default), {
+    name: 'rate',
+    description: 'Manage project hourly rates (usage: tt rate set|show)',
+  })
+)
+
+subCommands.set(
   'review',
   lazy(() => import('./commands/review').then((m) => m.default), {
     name: 'review',
