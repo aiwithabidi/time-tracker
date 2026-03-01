@@ -49,33 +49,33 @@
 
 ## Out of Scope
 
-- **Cloud/deployed dashboard** — local only, no auth needed
-- **Mobile responsive design** — desktop developer tool
-- **Team views** — personal tool
-- **PDF/print export** — use browser print or CSV export
-- **Drag-and-drop time editing** — use CLI `tt edit` commands
-- **Calendar integration** — timeline bar is the alternative
-- **AI-powered insights** — simple computed metrics only
+- **Cloud/deployed dashboard** -- local only, no auth needed
+- **Mobile responsive design** -- desktop developer tool
+- **Team views** -- personal tool
+- **PDF/print export** -- use browser print or CSV export
+- **Drag-and-drop time editing** -- use CLI `tt edit` commands
+- **Calendar integration** -- timeline bar is the alternative
+- **AI-powered insights** -- simple computed metrics only
 
 ## Traceability
 
 | REQ ID | Phase | Status |
 |--------|-------|--------|
-| SRV-01 | — | Pending |
-| SRV-02 | — | Pending |
-| SRV-03 | — | Pending |
-| SRV-04 | — | Pending |
-| TODAY-01 | — | Pending |
-| TODAY-02 | — | Pending |
-| TODAY-03 | — | Pending |
-| WEEK-01 | — | Pending |
-| WEEK-02 | — | Pending |
-| WEEK-03 | — | Pending |
-| PROJ-01 | — | Pending |
-| PROJ-02 | — | Pending |
-| PROJ-03 | — | Pending |
-| TIME-01 | — | Pending |
-| ACT-01 | — | Pending |
-| ACT-02 | — | Pending |
-| UI-01 | — | Pending |
-| UI-02 | — | Pending |
+| SRV-01 | Phase 11 | Pending |
+| SRV-02 | Phase 11 | Pending |
+| SRV-03 | Phase 13 | Pending |
+| SRV-04 | Phase 11 | Pending |
+| TODAY-01 | Phase 12 | Pending |
+| TODAY-02 | Phase 12 | Pending |
+| TODAY-03 | Phase 12 | Pending |
+| WEEK-01 | Phase 14 | Pending |
+| WEEK-02 | Phase 14 | Pending |
+| WEEK-03 | Phase 14 | Pending |
+| PROJ-01 | Phase 14 | Pending |
+| PROJ-02 | Phase 14 | Pending |
+| PROJ-03 | Phase 14 | Pending |
+| TIME-01 | Phase 15 | Pending |
+| ACT-01 | Phase 15 | Pending |
+| ACT-02 | Phase 15 | Pending |
+| UI-01 | Phase 11 | Pending |
+| UI-02 | Phase 11 | Pending |
