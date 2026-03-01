@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: MVP
-status: shipped
-last_updated: "2026-02-28T10:00:00.000Z"
+milestone: v1.1
+milestone_name: Hardening
+status: planning
+last_updated: "2026-02-28T12:00:00.000Z"
 progress:
   total_phases: 5
-  completed_phases: 5
-  total_plans: 10
-  completed_plans: 10
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -18,38 +18,37 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Effortless, accurate time tracking that works passively in the background
-**Current focus:** v1.0 shipped — planning next milestone
+**Current focus:** v1.1 Hardening — security, correctness, performance, code quality, tests
 
 ## Current Position
 
-Milestone: v1.0 MVP — SHIPPED 2026-02-28
-All 5 phases complete, 10/10 plans executed
-Archive: .planning/milestones/v1.0-ROADMAP.md
+Milestone: v1.1 Hardening — PLANNING
+Phase: Not started
+Next action: `/gsd:plan-phase 6` (Security Hardening) or `/gsd:plan-phase 7` (Correctness)
 
-Progress: [##########] 100%
+Progress: [..........] 0%
 
-## Performance Metrics
+## Milestone Scope
 
-**Velocity:**
-- Total plans completed: 10
-- Average duration: ~5 min
-- Total execution time: ~0.75 hours
+22 requirements across 5 phases:
+- Phase 6: Security Hardening (SEC-01..08) — 8 issues
+- Phase 7: Correctness and Performance (COR-01..06, PERF-01..02) — 8 issues
+- Phase 8: Code Quality and Refactoring (QUAL-01..06) — 6 issues
+- Phase 9: Test Suite (TEST-01..06) — 6 requirements
+- Phase 10: CLI Commands and Binary Rebuild (CLI-01..02) — 2 commands
 
-**By Phase:**
+## Dependencies
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01-foundation | 3/3 | ~15 min | ~5 min |
-| 02-hook-integration | 2/2 | ~7 min | ~3.5 min |
-| 03-reporting-export | 2/2 | ~9 min | ~4.5 min |
-| 04-session-correction | 2/2 | ~20 min | ~10 min |
-| 05-slash-commands | 1/1 | ~2 min | ~2 min |
+Phases 6 + 7: Independent, can run in parallel
+Phase 8: Depends on Phase 7
+Phase 9: Depends on Phase 8
+Phase 10: Depends on Phases 6 + 8
 
 ## Accumulated Context
 
 ### Decisions
 
-All decisions logged in PROJECT.md Key Decisions table.
+All v1.0 decisions in PROJECT.md remain valid.
 
 ### Pending Todos
 
@@ -57,10 +56,11 @@ None.
 
 ### Blockers/Concerns
 
-None — milestone shipped.
+- vitest + bun:sqlite incompatibility (TEST-01 needs mocked repos)
+- session-service.ts is 977 lines (QUAL-03 split is the largest refactor)
 
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: v1.0 milestone completed and archived
+Stopped at: v1.1 milestone defined, roadmap created
 Resume file: None

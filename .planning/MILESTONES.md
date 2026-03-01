@@ -18,11 +18,35 @@ CLI-first personal time tracker with automatic Claude Code integration, idle det
 
 ### Known Gaps
 
-- PROJ-02: `tt alias add` CLI command deferred (config file works)
-- PROJ-03: `tt rate set` CLI command deferred (config file works)
-- PROJ-05: Project config CLI management deferred (schema complete)
+- PROJ-02: `tt alias add` CLI command deferred (config file works) → v1.1 Phase 10
+- PROJ-03: `tt rate set` CLI command deferred (config file works) → v1.1 Phase 10
+- PROJ-05: Project config CLI management deferred (schema complete) → v1.1 Phase 10
 
 ### Archive
 
 - [v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 - [v1.0-REQUIREMENTS.md](milestones/v1.0-REQUIREMENTS.md)
+
+---
+
+## v1.1 Hardening — In Progress
+
+**Phases:** 5 (6-10) | **Requirements:** 22
+
+### Goals
+
+Security hardening, correctness fixes, performance optimization, code quality refactoring, test suite, and deferred CLI commands.
+
+### Phases
+
+| Phase | Focus | Requirements | Depends On |
+|-------|-------|-------------|------------|
+| 6. Security Hardening | S1-S8 fixes | SEC-01..08 | None |
+| 7. Correctness and Performance | C1-C6, P1-P2 fixes | COR-01..06, PERF-01..02 | None |
+| 8. Code Quality and Refactoring | Q1-Q7 structural improvements | QUAL-01..06 | Phase 7 |
+| 9. Test Suite | Unit + integration, 80% coverage | TEST-01..06 | Phase 8 |
+| 10. CLI Commands and Binary Rebuild | tt alias add, tt rate set, rebuild | CLI-01..02 | Phase 6, 8 |
+
+### Source
+
+Issues identified by security-reviewer and code-reviewer agents during v1.0 audit. Full details in [HANDOFF.md](HANDOFF.md).

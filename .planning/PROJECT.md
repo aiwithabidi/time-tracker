@@ -27,16 +27,23 @@ Effortless, accurate time tracking that works passively in the background — th
 - Session correction (edit, undo, split, merge) with atomic undo snapshots — v1.0
 - Claude Code slash commands (/tt, /tt:week, /tt:note, /tt:start, /tt:stop, /tt:projects, /tt:edit, /tt:review) — v1.0
 
-### Active
+### Active (v1.1 Hardening)
 
-- [ ] `tt alias add` CLI command for project alias management (currently config-file only)
-- [ ] `tt rate set` CLI command for hourly rate management (currently config-file only)
+- [ ] Security hardening — shell injection, path traversal, deserialization, race conditions, file permissions — v1.1
+- [ ] Correctness fixes — timezone bug, N+1 queries, dead code, migration error handling — v1.1
+- [ ] Performance — config caching, git root caching on pulse hot path — v1.1
+- [ ] Code quality — split god-service, extract shared utilities, error class hierarchy — v1.1
+- [ ] Test suite — vitest unit tests + bun integration tests, 80% coverage — v1.1
+- [ ] `tt alias add` CLI command for project alias management — v1.1
+- [ ] `tt rate set` CLI command for hourly rate management — v1.1
+
+### Backlog
+
 - [ ] Activity pattern analytics (productive hours, focus time, idle ratios)
 - [ ] Git context capture (branch, commit SHAs at session start/end)
 - [ ] JSON export for programmatic use
 - [ ] Direct ClickUp API push with idempotency
 - [ ] Shell completions for all commands
-- [ ] Integration/E2E test suite
 
 ### Out of Scope
 
@@ -50,7 +57,7 @@ Effortless, accurate time tracking that works passively in the background — th
 
 ## Context
 
-- Shipped v1.0 with 5,411 LOC TypeScript across 114 files
+- Shipped v1.0 with 5,411 LOC TypeScript across 114 files; v1.1 hardening in progress
 - Tech stack: Bun + bun:sqlite + drizzle-orm + gunshi + luxon + chalk + cli-table3 + zod
 - Compiled binary (dist/tt) starts in <100ms
 - Developer works in Ghostty terminal, 4-8 active client projects at any time
@@ -84,4 +91,4 @@ Effortless, accurate time tracking that works passively in the background — th
 | CSV to stdout, messages to stderr | Clean shell piping (`tt export csv > report.csv`) | Good |
 
 ---
-*Last updated: 2026-02-28 after v1.0 milestone*
+*Last updated: 2026-02-28 after v1.1 milestone planning*
