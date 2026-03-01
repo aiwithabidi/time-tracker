@@ -1,10 +1,35 @@
 import { define } from 'gunshi'
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs'
 import * as path from 'node:path'
 import * as os from 'node:os'
 import { createSessionService, getTerminalId } from '../helpers'
 
-const PULSE_ERROR_LOG = path.join(os.homedir(), '.tt', 'pulse-errors.log')
+const LOGS_DIR = path.join(os.homedir(), '.tt', 'logs')
+const MAX_LOG_AGE_DAYS = 30
+
+function getPulseLogPath(): string {
+  const date = new Date().toISOString().slice(0, 10)
+  mkdirSync(LOGS_DIR, { recursive: true })
+  return path.join(LOGS_DIR, `pulse-${date}.log`)
+}
+
+function rotateLogs(): void {
+  try {
+    const cutoff = Date.now() - MAX_LOG_AGE_DAYS * 24 * 60 * 60 * 1000
+    const files = readdirSync(LOGS_DIR).filter((f) => f.startsWith('pulse-'))
+    for (const file of files) {
+      const match = file.match(/pulse-(\d{4}-\d{2}-\d{2})\.log/)
+      if (match) {
+        const fileDate = new Date(match[1]!).getTime()
+        if (fileDate < cutoff) {
+          unlinkSync(path.join(LOGS_DIR, file))
+        }
+      }
+    }
+  } catch {
+    // Silent fail
+  }
+}
 
 const pulseCommand = define({
   name: 'pulse',
@@ -50,7 +75,8 @@ const pulseCommand = define({
       try {
         const timestamp = new Date().toISOString()
         const message = error instanceof Error ? error.message : String(error)
-        appendFileSync(PULSE_ERROR_LOG, `[${timestamp}] ${message}\n`)
+        appendFileSync(getPulseLogPath(), `[${timestamp}] ${message}\n`)
+        rotateLogs()
       } catch {
         // If logging itself fails, silently continue
       }

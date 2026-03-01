@@ -416,6 +416,29 @@ subCommands.set(
   })
 )
 
+subCommands.set(
+  'doctor',
+  lazy(() => import('./commands/doctor').then((m) => m.default), {
+    name: 'doctor',
+    description: 'Check tt installation health and auto-repair issues',
+    args: {
+      repair: {
+        type: 'boolean',
+        short: 'r',
+        description: 'Auto-repair fixable issues',
+      },
+    },
+  })
+)
+
+subCommands.set(
+  'config',
+  lazy(() => import('./commands/config').then((m) => m.default), {
+    name: 'config',
+    description: 'Manage tt configuration (usage: tt config list|get|set)',
+  })
+)
+
 await cli(process.argv.slice(2), mainCommand, {
   name: 'tt',
   description: 'Time tracking for developers',
