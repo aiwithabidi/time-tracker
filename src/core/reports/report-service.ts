@@ -1,15 +1,11 @@
 import type { Repositories } from '../../db/repositories/index'
 import type { Session, Project } from '../../db/types'
 import type { ProjectSummary, DayGroup, SessionRow, WeekSummary, TodaySummary, LastSessionResult } from './types'
+import { computeSessionDuration } from '../shared/duration'
 import { DateTime } from 'luxon'
 
 interface ReportServiceDeps {
   readonly repos: Repositories
-}
-
-function computeSessionDuration(session: Session): number {
-  const end = session.endTime ?? Date.now()
-  return Math.max(0, end - session.startTime - session.idleDeductedMs)
 }
 
 export function createReportService(deps: ReportServiceDeps) {

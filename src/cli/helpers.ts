@@ -1,17 +1,7 @@
 import { getDb } from '../db/client'
 import { createRepositories } from '../db/repositories/index'
 import { createSessionService as createService, type SessionService } from '../core/session/index'
-import {
-  NoActiveSessionError,
-  NoProjectFoundError,
-  InvalidTagError,
-  SessionNotFoundError,
-  AmbiguousIdError,
-  NothingToUndoError,
-  InvalidTimeRangeError,
-  InvalidSplitTimeError,
-  MergeValidationError,
-} from '../core/session/index'
+import { TimeTrackerError } from '../core/session/index'
 import { createReportService as createReport, type ReportService } from '../core/reports/index'
 import { createReviewService as createReview, type ReviewService } from '../core/review/index'
 import { errorOutput } from './format'
@@ -40,56 +30,8 @@ export function createReviewService(): ReviewService {
 }
 
 export function handleCommandError(err: unknown): void {
-  if (err instanceof NoActiveSessionError) {
-    errorOutput(err.message, err.suggestion)
-    process.exitCode = 1
-    return
-  }
-
-  if (err instanceof NoProjectFoundError) {
-    errorOutput(err.message, err.suggestion)
-    process.exitCode = 1
-    return
-  }
-
-  if (err instanceof InvalidTagError) {
-    errorOutput(err.message)
-    process.exitCode = 1
-    return
-  }
-
-  if (err instanceof SessionNotFoundError) {
-    errorOutput(err.message)
-    process.exitCode = 1
-    return
-  }
-
-  if (err instanceof AmbiguousIdError) {
-    errorOutput(err.message)
-    process.exitCode = 1
-    return
-  }
-
-  if (err instanceof NothingToUndoError) {
-    errorOutput(err.message)
-    process.exitCode = 1
-    return
-  }
-
-  if (err instanceof InvalidTimeRangeError) {
-    errorOutput(err.message)
-    process.exitCode = 1
-    return
-  }
-
-  if (err instanceof InvalidSplitTimeError) {
-    errorOutput(err.message)
-    process.exitCode = 1
-    return
-  }
-
-  if (err instanceof MergeValidationError) {
-    errorOutput(err.message)
+  if (err instanceof TimeTrackerError) {
+    errorOutput(err.userMessage, err.suggestion)
     process.exitCode = 1
     return
   }

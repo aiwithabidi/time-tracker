@@ -11,13 +11,10 @@ import type {
   SpreadDay,
 } from './types'
 
+import { computeSessionDuration } from '../shared/duration'
+
 interface ReviewServiceDeps {
   readonly repos: Repositories
-}
-
-function computeSessionDuration(session: { startTime: number; endTime: number | null; idleDeductedMs: number }): number {
-  const end = session.endTime ?? Date.now()
-  return Math.max(0, end - session.startTime - session.idleDeductedMs)
 }
 
 export function createReviewService(deps: ReviewServiceDeps) {

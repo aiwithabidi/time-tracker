@@ -113,6 +113,7 @@ const MIGRATIONS_SQL = [
   deletions INTEGER
 );`,
   `CREATE INDEX IF NOT EXISTS idx_review_git_commits_review ON review_git_commits(review_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_activity_pulses_terminal_timestamp ON activity_pulses(terminal_id, timestamp);`,
 ]
 
 export function ensureSchema(sqlite: Database): void {

@@ -51,13 +51,13 @@ export function getSqlite(): Database {
   return sqliteInstance!
 }
 
-export function withTransaction<T>(fn: (db: DbInstance) => T): T {
-  const db = getDb()
+export function withTransaction<T>(fn: () => T): T {
+  getDb() // ensure initialized
   const sqlite = getSqlite()
 
   sqlite.exec('BEGIN IMMEDIATE')
   try {
-    const result = fn(db)
+    const result = fn()
     sqlite.exec('COMMIT')
     return result
   } catch (error) {

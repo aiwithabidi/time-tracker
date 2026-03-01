@@ -1,5 +1,9 @@
 export { createSessionService, type SessionService } from './session-service'
+export { createPulseService, type PulseService } from './pulse-service'
+export { createLifecycleService, type LifecycleService } from './lifecycle-service'
+export { createEditService, type EditService } from './edit-service'
 export {
+  TimeTrackerError,
   NoActiveSessionError,
   NoProjectFoundError,
   InvalidTagError,
@@ -30,3 +34,4 @@ export type {
 } from './types'
 export { computeIdleState, computeIdleDeduction, DEFAULT_IDLE_CONFIG } from './idle-detector'
 export type { IdleState, IdleConfig } from './idle-detector'
+export { computeSessionDuration } from '../shared/duration'
