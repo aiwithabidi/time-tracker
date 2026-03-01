@@ -24,8 +24,8 @@ See: .planning/PROJECT.md (updated 2026-02-28)
 
 Phase: Not started (defining requirements)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-02-28 — Milestone v1.2 started
+Status: Requirements defined, roadmap creation next
+Last activity: 2026-02-28 — Requirements committed, research complete
 
 Progress: [..........] 0%
 

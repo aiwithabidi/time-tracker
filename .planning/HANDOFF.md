@@ -1,89 +1,34 @@
-# Handoff: TimeTracker v1.0 → v1.1
+# Handoff: v1.2 Web Dashboard — Milestone Setup
 
 **Date:** 2026-02-28
-**Context:** v1.0 milestone shipped and archived. Security + code review completed. This document captures all findings for the next session.
+**Context:** v1.2 milestone started, research done, requirements defined. Roadmap creation is next.
 
-## Status
+## Done This Session
 
-- v1.0 tagged and archived in `.planning/milestones/`
-- Binary installed at `~/.tt/bin/tt`
-- Claude Code hooks active (SessionStart, PostToolUse, Stop)
-- PATH added to `~/.zshrc`
-- Tracking is live and working (13 sessions captured)
+1. **Bug fix**: `tt` crashing with "duplicate column name: paused_at" — fixed `src/db/migrate.ts:127`, rebuilt binary, deployed to `~/.tt/bin/tt`
+2. **Milestone started**: PROJECT.md + STATE.md updated for v1.2
+3. **Research complete**: 4 parallel researchers wrote Stack, Features, Architecture, Pitfalls to `.planning/research/`
+4. **Requirements defined**: 18 reqs in `.planning/REQUIREMENTS.md` (SRV-01..04, TODAY-01..03, WEEK-01..03, PROJ-01..03, TIME-01, ACT-01..02, UI-01..02)
 
-## Critical Fixes (Do First)
+## Next Step
 
-### Security — CRITICAL/HIGH
+**Create the roadmap.** Spawn `gsd-roadmapper` with:
+- Phase numbering starts at **11** (v1.1 ended at 10)
+- Files: PROJECT.md, REQUIREMENTS.md, research/SUMMARY.md, MILESTONES.md
+- Write: ROADMAP.md, update STATE.md + REQUIREMENTS.md traceability
+- Present to user for approval, then commit
 
-| # | Issue | File | Fix |
-|---|-------|------|-----|
-| S1 | Shell injection — unquoted SESSION_ID used as filename in hooks | `src/cli/commands/setup.ts` (hook templates) | Sanitize: `tr -cd 'a-zA-Z0-9_-'` or `basename` |
-| S2 | Path traversal — SESSION_ID in `~/.tt/terminals/$SESSION_ID` | `src/hooks/*.sh` | Same sanitization as S1 |
-| S3 | Unsafe undo deserialization — `JSON.parse` cast as UndoSnapshot, no validation | `src/db/repositories/undo-repository.ts:35` | Validate with Zod schema before use |
-| S4 | Race condition — pulse rate limit + session singleton not in transaction | `src/core/session/session-service.ts:542` | Wrap `pulse()` and `start()` in `withTransaction()` |
+Research suggests 5 phases: Server Shell → Today View + API → WebSocket + Live Timer → Weekly + Project Views → Quick Actions + Timeline
 
-### Correctness — P0
+## User Notes
 
-| # | Issue | File | Fix |
-|---|-------|------|-----|
-| C1 | Timezone bug — `getStartOfToday()` uses `new Date()` instead of Luxon | `session-service.ts:49-52` | Use `DateTime.now().startOf('day').toMillis()` |
-| C2 | Dead code — `findBySlug('')` in stop() | `session-service.ts:381` | Remove, add `findById()` to project repo |
-| C3 | N+1 — `findAll().find()` called 5 times instead of `findById()` | `session-service.ts:383,397,433,663,811` | Add `findById(id)` to project-repository |
-| C4 | Migration swallows ALL errors silently | `src/db/migrate.ts:121-127` | Only catch "already exists" errors |
-| C5 | `resolveProject()` dead TTY branch | `src/services/project-resolver.ts:91-100` | Remove dead code |
-| C6 | LIKE wildcards not escaped in session prefix search | `session-repository.ts:176` | Validate hex chars, escape `%` and `_` |
+- Dashboard is part of `tt` CLI binary (same codebase)
+- Must survive Claude Code updates (lives in `~/.tt/`)
+- Real-time WebSocket, minimal dark theme, quick actions
+- Only new dep: Chart.js ^4.5.1
 
-### Performance — P0
+## Commits
 
-| # | Issue | File | Fix |
-|---|-------|------|-----|
-| P1 | Config read twice per pulse (filesystem I/O on hot path) | `session-service.ts:59-65` | Load config once at service creation |
-| P2 | `git rev-parse` subprocess spawned every pulse | `project-resolver.ts:50` | Cache git root per cwd |
-
-## Important Fixes (Do Soon)
-
-### Security — MEDIUM
-
-| # | Issue | Fix |
-|---|-------|-----|
-| S5 | DB and config created with default permissions (world-readable) | `chmod 700` on `~/.tt/`, `600` on db + config |
-| S6 | No note content length limit | Cap at 10,000 chars |
-| S7 | Git hash could be interpreted as flag | Add `--` separator in git commands |
-| S8 | Silent pulse error swallowing | Log to `~/.tt/pulse-errors.log` |
-
-### Code Quality — P1
-
-| # | Issue | Fix |
-|---|-------|-----|
-| Q1 | `computeSessionDuration()` duplicated in 3 files | Extract to `src/core/shared/duration.ts` |
-| Q2 | Active session resolution pattern duplicated 7 times | Extract `resolveActiveSession()` helper |
-| Q3 | `session-service.ts` is 977 lines (limit: 800) | Split into pulse/lifecycle/edit services |
-| Q4 | `handleCommandError` is a long instanceof chain | Use base `TimeTrackerError` class |
-| Q5 | Zero test coverage on core logic (vitest + bun:sqlite incompatible) | Mock repos for vitest, use `bun test` for DB integration |
-| Q6 | `withTransaction` signature accepts unused `db` param | Change to `fn: () => T` |
-| Q7 | No `activity_pulses` index on `terminal_id` | Add compound index `(terminal_id, timestamp)` |
-
-## Positive Findings (No Action Needed)
-
-- All SQL queries parameterized via Drizzle ORM
-- Tag validation with kebab-case regex
-- Config validated with Zod on load
-- CSV export has proper RFC 4180 escaping
-- `withTransaction` uses `BEGIN IMMEDIATE` correctly
-- Git commands use array spawn (no shell injection)
-- No hardcoded secrets anywhere
-
-## Suggested v1.1 Scope
-
-Based on these reviews, a v1.1 milestone should focus on:
-
-1. **Security hardening** — S1-S8 fixes
-2. **Correctness fixes** — C1-C6
-3. **Performance** — P1-P2 (pulse under 100ms budget)
-4. **Code quality** — Q1-Q7 (split god-service, add tests)
-5. **Usability** — `tt alias add` and `tt rate set` CLI commands
-
-Run `/gsd:new-milestone` to start v1.1 planning.
-
----
-*Generated: 2026-02-28 from security-reviewer and code-reviewer agents*
+- `8b0472e` fix: handle duplicate column name error in schema migration
+- `9258ca1` docs: start milestone v1.2 Web Dashboard
+- `477817d` docs: define milestone v1.2 requirements and research
