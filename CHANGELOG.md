@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.3.0] - 2026-03-01
+
+### Added
+- **Goals** — daily time goals with duration parsing
+  - `tt goal set <duration>` — set daily goal (supports "6h", "4h30m", "90m", "2h 15m")
+  - `tt goal show` — display current goal
+  - `tt goal clear` — remove goal
+  - Goal progress shown in `tt now` and `tt today` output
+  - `goal` field added to config schema
+- **Streaks** — tracking streak display
+  - `tt streak` — current/best streak, average daily time, 28-day ASCII heatmap
+  - `createStreakService()` helper in CLI
+- **JSON output** — `tt now --json` for machine-readable output (editor integrations)
+- **VS Code / Cursor extension** (`packages/vscode/`)
+  - Passive pulse tracking on file save and editor focus
+  - Status bar showing current project, elapsed time, and goal percentage
+  - Auto-discovers tt binary (config, ~/.tt/bin/tt, PATH)
+  - 5s debounce + 55s rate limiting on pulses
+  - Zero runtime dependencies, 3.7KB bundled
+  - Supports VS Code, Cursor, Windsurf, and forks
+- **Local dashboard** — browser-based analytics
+  - `tt dashboard` — opens dashboard in default browser
+  - Bun.serve() API server with read-only SQLite access
+  - Svelte 5 + Tailwind CSS v4 frontend with GitHub dark theme
+  - Overview, GitHub-style heatmap, weekly chart, session timeline, project breakdown, streak card
+  - Configurable port (`--port` flag or `TT_DASHBOARD_PORT` env)
+
+### Infrastructure
+- GitHub Actions CI jobs for VS Code extension and dashboard builds
+
 ## [0.2.2] - 2026-03-01
 
 ### Added

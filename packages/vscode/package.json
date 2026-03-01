@@ -1,0 +1,49 @@
+{
+  "name": "tt-time-tracker",
+  "displayName": "tt - Time Tracker",
+  "description": "Passive time tracking for developers",
+  "publisher": "tt-cli",
+  "version": "0.3.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "main": "./out/extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "configuration": {
+      "title": "tt Time Tracker",
+      "properties": {
+        "tt.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable tt time tracking"
+        },
+        "tt.binaryPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the tt binary (leave empty for auto-detection)"
+        },
+        "tt.statusBarInterval": {
+          "type": "number",
+          "default": 30,
+          "minimum": 5,
+          "description": "Status bar refresh interval in seconds"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "tt.showStatus",
+        "title": "Show Time Tracking Status"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "bun build ./src/extension.ts --outdir ./out --target=node --format=cjs --external=vscode --minify",
+    "package": "bunx @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0"
+  }
+}

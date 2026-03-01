@@ -4,6 +4,7 @@ import { createSessionService as createService, type SessionService } from '../c
 import { TimeTrackerError } from '../core/session/index'
 import { createReportService as createReport, type ReportService } from '../core/reports/index'
 import { createReviewService as createReview, type ReviewService } from '../core/review/index'
+import { createStreakService as createStreak, type StreakService } from '../core/reports/streak-service'
 import { errorOutput } from './format'
 import { logCommandEvent, parseCommandFromArgv } from '../core/event-logger'
 
@@ -11,34 +12,38 @@ export function getTerminalId(): string {
   return process.env['TT_TERMINAL_ID'] ?? `pid-${process.pid}`
 }
 
-export function createSessionService(): SessionService {
-  const db = getDb()
-  const repos = createRepositories(db)
+function getRepos(): ReturnType<typeof createRepositories> {
+  return createRepositories(getDb())
+}
 
-  return createService({ repos })
+export function createSessionService(): SessionService {
+  return createService({ repos: getRepos() })
 }
 
 export function createReportService(): ReportService {
-  const db = getDb()
-  const repos = createRepositories(db)
-  return createReport({ repos })
+  return createReport({ repos: getRepos() })
 }
 
 export function createReviewService(): ReviewService {
-  const db = getDb()
-  const repos = createRepositories(db)
-  return createReview({ repos })
+  return createReview({ repos: getRepos() })
+}
+
+export function createStreakService(): StreakService {
+  return createStreak({ repos: getRepos() })
 }
 
 export function handleCommandError(err: unknown): void {
   const parsed = parseCommandFromArgv(process.argv)
 
   if (parsed.command !== 'pulse') {
-    const errorMessage = err instanceof TimeTrackerError
-      ? err.userMessage
-      : err instanceof Error
-        ? err.message
-        : 'An unexpected error occurred'
+    let errorMessage: string
+    if (err instanceof TimeTrackerError) {
+      errorMessage = err.userMessage
+    } else if (err instanceof Error) {
+      errorMessage = err.message
+    } else {
+      errorMessage = 'An unexpected error occurred'
+    }
     const errorType = err instanceof Error ? err.constructor.name : 'Unknown'
 
     logCommandEvent({

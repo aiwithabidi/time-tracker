@@ -1,6 +1,8 @@
 import { define } from 'gunshi'
 import { formatDuration, output } from '../format'
-import { createReportService, handleCommandError } from '../helpers'
+import { createReportService, createStreakService, handleCommandError } from '../helpers'
+import { loadConfig } from '../../config/config-loader'
+import { formatGoalDuration } from '../duration-parsing'
 import { compactTable } from '../table'
 
 const todayCommand = define({
@@ -31,6 +33,25 @@ const todayCommand = define({
       }
 
       output('info', `Total: ${formatDuration(result.grandTotalMs)}`)
+
+      // Goal and streak footer
+      const config = loadConfig()
+      const goalMinutes = config.goal.dailyMinutes
+      if (goalMinutes) {
+        const todayMinutes = result.grandTotalMs / 60_000
+        const percent = Math.min(100, Math.round((todayMinutes / goalMinutes) * 100))
+        const goalStr = formatGoalDuration(goalMinutes)
+        const todayStr = formatDuration(result.grandTotalMs)
+
+        const streakService = createStreakService()
+        const streak = streakService.getStreak(goalMinutes)
+
+        const goalSymbol: 'started' | 'info' = percent >= 100 ? 'started' : 'info'
+        output(goalSymbol, `Goal: ${todayStr} / ${goalStr} (${percent}%)`)
+        if (streak.current > 0) {
+          output('info', `Streak: ${streak.current} day${streak.current === 1 ? '' : 's'}`)
+        }
+      }
     } catch (error) {
       handleCommandError(error)
     }

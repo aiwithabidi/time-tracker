@@ -69,6 +69,7 @@ describe('buildIdleConfig', () => {
       projects: {},
       defaults: { currency: 'USD' },
       idle: { softIdleMinutes: 5, hardIdleMinutes: 15 },
+      goal: {},
     }
     const result = buildIdleConfig(config)
     expect(result.softIdleMs).toBe(5 * 60 * 1000)

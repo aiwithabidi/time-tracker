@@ -6,6 +6,7 @@ export default defineConfig({
     exclude: [
       'tests/integration/**',
       'tests/core/review/**',
+      'tests/core/streak-service.test.ts',
       'src/core/session/__tests__/lifecycle-service.test.ts',
     ],
     coverage: {

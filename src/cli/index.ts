@@ -50,6 +50,12 @@ subCommands.set(
   lazy(() => import('./commands/now').then((m) => m.default), {
     name: 'now',
     description: 'Show current tracking status',
+    args: {
+      json: {
+        type: 'boolean',
+        description: 'Output machine-readable JSON',
+      },
+    },
   })
 )
 
@@ -482,6 +488,37 @@ subCommands.set(
         description: 'Output raw JSON for AI analysis',
       },
     },
+  })
+)
+
+subCommands.set(
+  'dashboard',
+  lazy(() => import('./commands/dashboard').then((m) => m.default), {
+    name: 'dashboard',
+    description: 'Open the time tracking dashboard in your browser',
+    args: {
+      port: {
+        type: 'string',
+        short: 'p',
+        description: 'Port to run the dashboard on (default: 7777)',
+      },
+    },
+  })
+)
+
+subCommands.set(
+  'streak',
+  lazy(() => import('./commands/streak').then((m) => m.default), {
+    name: 'streak',
+    description: 'Show your tracking streak and 28-day heatmap',
+  })
+)
+
+subCommands.set(
+  'goal',
+  lazy(() => import('./commands/goal').then((m) => m.default), {
+    name: 'goal',
+    description: 'Manage daily time goal (usage: tt goal set|show|clear)',
   })
 )
 

@@ -33,3 +33,37 @@ jobs:
 
       - name: Run ${{ matrix.task }}
         run: ${{ matrix.command }}
+
+  vscode-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install VS Code extension dev dependencies
+        run: cd packages/vscode && bun install
+
+      - name: Build VS Code extension
+        run: cd packages/vscode && bun run build
+
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dashboard dependencies
+        run: cd packages/dashboard && bun install
+
+      - name: Build dashboard
+        run: cd packages/dashboard && bun run build

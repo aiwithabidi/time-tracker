@@ -18,6 +18,9 @@ export const configSchema = z.object({
     softIdleMinutes: z.number().min(1).default(8),
     hardIdleMinutes: z.number().min(1).default(20),
   }).default({ softIdleMinutes: 8, hardIdleMinutes: 20 }),
+  goal: z.object({
+    dailyMinutes: z.number().int().min(1).optional(),
+  }).default({}),
   sourceRepo: z
     .string()
     .refine((p) => path.isAbsolute(p), {
