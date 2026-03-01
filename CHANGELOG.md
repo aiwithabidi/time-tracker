@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.2.2] - 2026-03-01
+
+### Added
+- GitHub Actions CI pipeline — typecheck, test, build run in parallel on every push/PR
+- CI status badge in README
+- `CONTRIBUTING.md` — development setup, project structure, code style, contributor guidelines
+- GitHub issue templates (bug report, feature request) and PR template
+- Auto-Update section in README documenting the update mechanism
+- Project Structure section in README
+- Development section in README with full workflow commands
+
+### Security
+- **Remote origin verification** — `tt update` now verifies the git remote URL matches `github.com/aiwithabidi/time-tracker` before pulling (supply-chain protection)
+- **sourceRepo path validation** — Zod schema requires absolute paths, rejecting relative path injection
+- **Build rollback** — if pull, install, or build fails during update, automatically resets to the previous commit
+- **Per-command timeouts** — git operations 30s, `bun install` 120s, `bun run build` 120s (prevents hangs)
+- **Atomic binary replacement** — writes to `.tmp` then renames, preventing corrupt binaries on crash
+
+### Fixed
+- Excluded `lifecycle-service.test.ts` from vitest (requires `bun:sqlite` runtime, runs under `bun test` instead)
+- Removed unused `saveConfig` import from update command
+
 ## [0.2.1] - 2026-03-01
 
 ### Added
