@@ -6,7 +6,7 @@ import { define } from 'gunshi'
 import { VERSION } from '../version'
 import { output, errorOutput } from '../format'
 import { handleCommandError } from '../helpers'
-import { loadConfig, saveConfig } from '../../config/config-loader'
+import { loadConfig } from '../../config/config-loader'
 
 function getSourceRepo(): string {
   const config = loadConfig()
@@ -18,8 +18,28 @@ function getSourceRepo(): string {
   )
 }
 
-function exec(cmd: string, cwd: string): string {
-  return execSync(cmd, { encoding: 'utf8', cwd, timeout: 30_000 }).trim()
+const TIMEOUT_GIT = 30_000
+const TIMEOUT_INSTALL = 120_000
+const TIMEOUT_BUILD = 120_000
+
+const EXPECTED_REPO_PATTERNS = [
+  /github\.com[:/]aiwithabidi\/time-tracker(\.git)?$/,
+]
+
+function exec(cmd: string, cwd: string, timeout = TIMEOUT_GIT): string {
+  return execSync(cmd, { encoding: 'utf8', cwd, timeout }).trim()
+}
+
+function verifyRemoteOrigin(repoDir: string): void {
+  const remoteUrl = exec('git remote get-url origin', repoDir)
+  const isTrusted = EXPECTED_REPO_PATTERNS.some((pattern) =>
+    pattern.test(remoteUrl),
+  )
+  if (!isTrusted) {
+    throw new Error(
+      `Untrusted remote origin: ${remoteUrl}\nExpected a github.com/aiwithabidi/time-tracker remote.`,
+    )
+  }
 }
 
 function getLocalHead(repoDir: string): string {
@@ -128,25 +148,45 @@ const updateCommand = define({
         }
       }
 
-      // Pull
-      output('info', 'Pulling latest changes...')
-      exec('git pull origin main', repoDir)
+      // Verify remote URL before pulling code
+      verifyRemoteOrigin(repoDir)
 
-      // Install deps
-      output('info', 'Installing dependencies...')
-      exec('bun install', repoDir)
+      // Save head for rollback
+      const savedHead = localHead
 
-      // Build
-      output('info', 'Building...')
-      exec('bun run build', repoDir)
+      try {
+        // Pull
+        output('info', 'Pulling latest changes...')
+        exec('git pull origin main', repoDir, TIMEOUT_GIT)
 
-      // Copy binary
+        // Install deps
+        output('info', 'Installing dependencies...')
+        exec('bun install', repoDir, TIMEOUT_INSTALL)
+
+        // Build
+        output('info', 'Building...')
+        exec('bun run build', repoDir, TIMEOUT_BUILD)
+      } catch (buildError) {
+        // Rollback on failure
+        output('info', 'Build failed, rolling back...')
+        try {
+          exec(`git reset --hard ${savedHead}`, repoDir)
+        } catch {
+          // Rollback itself failed — leave repo in current state
+        }
+        clearUpdateCache()
+        throw buildError
+      }
+
+      // Atomic binary replacement
       const builtBinary = path.join(repoDir, 'dist', 'tt')
       const installTarget = path.join(os.homedir(), '.tt', 'bin', 'tt')
+      const tmpTarget = `${installTarget}.tmp`
 
       if (fs.existsSync(builtBinary)) {
-        fs.copyFileSync(builtBinary, installTarget)
-        fs.chmodSync(installTarget, 0o755)
+        fs.copyFileSync(builtBinary, tmpTarget)
+        fs.chmodSync(tmpTarget, 0o755)
+        fs.renameSync(tmpTarget, installTarget)
         output('started', 'Binary installed')
       } else {
         errorOutput('Built binary not found at dist/tt')
@@ -156,7 +196,6 @@ const updateCommand = define({
 
       // Write VERSION file
       const versionFile = path.join(os.homedir(), '.tt', 'VERSION')
-      // Read the new VERSION from the freshly built source
       const newVersionPath = path.join(repoDir, 'src', 'cli', 'version.ts')
       let newVersion = VERSION
       if (fs.existsSync(newVersionPath)) {

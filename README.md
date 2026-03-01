@@ -1,10 +1,12 @@
-# tt — Time Tracking for Developers
+# tt -- Time Tracking for Developers
+
+[![CI](https://github.com/aiwithabidi/time-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/aiwithabidi/time-tracker/actions/workflows/ci.yml)
 
 Effortless, accurate time tracking that works passively in the background. Built for freelance developers who use [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
 
 ```
 $ tt now
-▶ client-project  1h 23m (today: 4h 15m)
+> client-project  1h 23m (today: 4h 15m)
 ```
 
 **No browser tabs. No manual timers. No context switching.** Open your terminal, start coding, and `tt` handles the rest.
@@ -25,7 +27,7 @@ flowchart LR
 
 `tt` hooks into Claude Code's lifecycle events. When you open a terminal in a project directory, tracking starts. As you work, activity pulses keep the session alive. Step away for 20 minutes? Time pauses automatically. Come back? It resumes. Close the terminal? Session stops.
 
-Your time data lives in a local SQLite database at `~/.tt/tt.db` — no cloud, no accounts, no sync complexity.
+Your time data lives in a local SQLite database at `~/.tt/tt.db` -- no cloud, no accounts, no sync complexity.
 
 ## Install
 
@@ -44,7 +46,7 @@ The `setup` command:
 - Installs hook scripts to `~/.tt/hooks/`
 - Prints the Claude Code configuration to add to `~/.claude/settings.json`
 
-> **Requires [Bun](https://bun.sh)** — `curl -fsSL https://bun.sh/install | bash`
+> **Requires [Bun](https://bun.sh)** -- `curl -fsSL https://bun.sh/install | bash`
 
 ## Quick Start
 
@@ -61,7 +63,7 @@ tt week --billable          # With dollar amounts
 tt log --from this-week     # Session history
 
 # After running `tt setup` and adding hooks to Claude Code:
-# Everything is automatic — just open your terminal and code
+# Everything is automatic -- just open your terminal and code
 ```
 
 ## Commands
@@ -118,6 +120,8 @@ tt log --from this-week     # Session history
 | `tt logs -c start --from 2026-03-01` | Filter by command and date |
 | `tt doctor` | Health check (20 checks + auto-repair) |
 | `tt config list` | Show all configuration |
+| `tt update` | Update to latest version from source |
+| `tt update --check` | Check for updates without installing |
 
 > Session IDs are the first 8 characters shown in `tt log`.
 
@@ -152,17 +156,40 @@ graph TD
 ```
 
 **Clean layers, no magic:**
-- **CLI** — Gunshi command definitions, formatting, user I/O
-- **Core** — Pure business logic. Sessions, idle detection, reports, CSV export
-- **Data** — Repository pattern over SQLite. Drizzle ORM for type-safe queries
+- **CLI** -- Gunshi command definitions, formatting, user I/O
+- **Core** -- Pure business logic. Sessions, idle detection, reports, CSV export
+- **Data** -- Repository pattern over SQLite. Drizzle ORM for type-safe queries
+
+## Project Structure
+
+```
+src/
+  cli/           Command definitions (gunshi), formatting, helpers
+    commands/    One file per command (start.ts, stop.ts, now.ts, ...)
+  core/          Pure business logic
+    session/     Session lifecycle, idle detection
+    reports/     Report generation
+    export/      CSV export
+    review/      Work review generation
+    shared/      Shared utilities (time math, duration formatting)
+  services/      Service factory layer (creates services with DB access)
+  db/            SQLite schema (Drizzle ORM), repositories, migrations
+  config/        Config loading, Zod schemas, types
+  hooks/         Claude Code hook scripts (pulse, session lifecycle)
+tests/
+  cli/           CLI command tests
+  core/          Business logic tests
+  integration/   End-to-end integration tests
+skills/          Claude Code slash commands (/tt, /tt:start, /tt:week, ...)
+```
 
 ## Project Detection
 
 `tt` automatically figures out which project you're working on:
 
-1. **Config alias** (highest priority) — Match directory to a configured project
-2. **Git root** (fallback) — Use the git repository name as the project slug
-3. **Manual flag** — `tt start --project my-project`
+1. **Config alias** (highest priority) -- Match directory to a configured project
+2. **Git root** (fallback) -- Use the git repository name as the project slug
+3. **Manual flag** -- `tt start --project my-project`
 
 ## Idle Detection
 
@@ -180,10 +207,10 @@ stateDiagram-v2
     note right of Paused: Break time deducted\nimmediately
 ```
 
-- **Active** — Working normally, time accumulates
-- **Soft idle** (8min) — Warning shown in `tt now`, no deduction yet
-- **Hard idle** (20min) — Time auto-paused, excess deducted from billable hours
-- **Paused** — Manual break via `tt away`, deducted immediately
+- **Active** -- Working normally, time accumulates
+- **Soft idle** (8min) -- Warning shown in `tt now`, no deduction yet
+- **Hard idle** (20min) -- Time auto-paused, excess deducted from billable hours
+- **Paused** -- Manual break via `tt away`, deducted immediately
 
 Thresholds are configurable in `~/.tt/config.json`.
 
@@ -223,7 +250,7 @@ If you use Claude Code, `tt` ships with slash commands that work inside conversa
 | `/tt:note meeting notes` | Add a note |
 | `/tt:edit <id> --start 09:00` | Edit a session |
 
-These are Claude Code [skills](https://docs.anthropic.com/en/docs/claude-code/skills) that invoke the `tt` binary directly — no AI processing needed, instant results.
+These are Claude Code [skills](https://docs.anthropic.com/en/docs/claude-code/skills) that invoke the `tt` binary directly -- no AI processing needed, instant results.
 
 ## CSV Export
 
@@ -242,6 +269,46 @@ tt export csv --project client-a > january-hours.csv
 
 **CSV columns:** `project, date, start_time, end_time, duration_hours, duration_human, notes, tags`
 
+## Auto-Update
+
+`tt` can update itself from source:
+
+```bash
+tt update           # Pull, build, and install the latest version
+tt update --check   # Just check if an update is available
+```
+
+The update mechanism:
+1. **Verifies the remote origin** matches the expected GitHub repository (supply-chain protection)
+2. **Pulls** the latest changes from `origin/main`
+3. **Installs** dependencies and **builds** a new binary
+4. **Atomically replaces** the installed binary (write to `.tmp`, then rename)
+5. **Rolls back** automatically if the build fails (resets to the previous commit)
+
+A background check runs on each `tt` invocation (throttled to once per hour) and shows a status indicator when an update is available.
+
+## Development
+
+```bash
+# Prerequisites
+bun --version  # Requires Bun (https://bun.sh)
+
+# Setup
+git clone https://github.com/aiwithabidi/time-tracker.git
+cd time-tracker
+bun install
+
+# Development workflow
+bun run dev -- now              # Run commands without compiling
+bun run typecheck               # Type checking
+bun run test:unit               # Unit tests with coverage
+bun run test:integration        # Integration tests
+bun run test                    # All tests
+bun run build                   # Compile to native binary (dist/tt)
+```
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for full contributor guidelines.
+
 ## Tech Stack
 
 | Component | Choice | Why |
@@ -252,6 +319,7 @@ tt export csv --project client-a > january-hours.csv
 | CLI | [Gunshi](https://github.com/poyoho/gunshi) | Lazy-loaded subcommands for fast startup |
 | Dates | [Luxon](https://moment.github.io/luxon/) | Timezone-aware, reliable date math |
 | Validation | [Zod](https://zod.dev) | Runtime type safety for config and input |
+| Testing | [Vitest](https://vitest.dev) | Fast, Bun-compatible, coverage built-in |
 
 ## License
 
