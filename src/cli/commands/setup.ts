@@ -235,7 +235,7 @@ function patchSettingsJson(ttDir: string): boolean {
 
   if (!hasTtSessionStart) {
     sessionStartHooks.push({
-      hooks: [{ type: 'command', command: ttSessionStartCommand }],
+      hooks: [{ type: 'command', command: ttSessionStartCommand, async: true }],
     })
     changed = true
   }
@@ -260,6 +260,7 @@ function patchSettingsJson(ttDir: string): boolean {
 
   if (!hasTtPostToolUse) {
     postToolUseHooks.push({
+      matcher: 'tool != "AskUserQuestion" && tool != "ExitPlanMode"',
       hooks: [{ type: 'command', command: '~/.tt/hooks/post-tool-use.sh', async: true }],
     })
     hooks['PostToolUse'] = postToolUseHooks
